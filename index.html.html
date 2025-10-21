@@ -962,7 +962,7 @@
                 3.  Balanceamento de Carga: Para todas as outras rotas (onde as regras 1 e 2 não se aplicam), distribua-as da forma mais EQUILIBRADA possível entre as transportadoras restantes (excluindo 'Envios Extra' se não for o caso). O objetivo principal do balanceamento é o NÚMERO DE ROTAS por transportadora.
                 4.  Formato de Saída: Sua resposta DEVE ser um array JSON de objetos, onde cada objeto contém exatamente duas chaves: "originalRouteId" e "assignedCarrier". Não inclua nenhuma outra informação ou texto na sua resposta.`;
             
-            const apiKey = "";
+            const apiKey = "AIzaSyB_z814W_J5MPIH3fCHKiFu5PJbcTE4578";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
@@ -1196,7 +1196,7 @@
             const systemPrompt = `Você é um analista de operações logísticas especialista em entregas de última milha (last-mile) na cidade de Maceió, Alagoas, Brasil. Seu objetivo é analisar dados diários de distribuição de rotas e fornecer insights concisos e acionáveis para o gerente de operações. Sua análise deve ser breve e suas sugestões práticas e diretas ao ponto. Responda sempre em português do Brasil. Use Markdown para formatar a resposta.`;
             const userQuery = 'Analise a seguinte distribuição de rotas para hoje, ' + new Date().toLocaleDateString('pt-BR') + '. Forneça um resumo executivo de uma frase e 2 a 3 sugestões específicas para otimização, considerando equilíbrio de carga, agrupamento geográfico e riscos. Dados: ```json\n' + JSON.stringify(analysisData, null, 2) + '\n```';
             
-            const apiKey = "";
+            const apiKey = "AIzaSyB_z814W_J5MPIH3fCHKiFu5PJbcTE4578";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             const payload = { contents: [{ parts: [{ text: userQuery }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
 
