@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Distribuidor de ROTAS AM/PM</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Distribuidor de ROTAS AM/PM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <!-- LeafletJS for Map View -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -66,6 +66,35 @@
     }
 
     #map { height: 100%; width: 100%; border-radius: 0.5rem; z-index: 10; }
+    
+    /* Toast Notification Styles */
+    #toast-container {
+        position: fixed;
+        top: 1.25rem;
+        right: 1.25rem;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    #toast-container .toast {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        color: white;
+        min-width: 250px;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        animation: slideInRight 0.3s ease-out, fadeOut 0.5s ease-in 3.5s forwards;
+        opacity: 1;
+        transform: translateX(0);
+    }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+    .toast.toast-success { background-color: #166534; } /* green-800 */
+    .toast.toast-error { background-color: #991b1b; } /* red-800 */
+    .toast.toast-info { background-color: #1d4ed8; } /* blue-700 */
 
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(10px); }
@@ -123,10 +152,10 @@
                 <label class="block text-lg font-semibold mb-3">Selecione o CSV com as rotas</label>
                 <p class="text-sm text-gray-400 mb-4">Arquivo contendo todas as paradas. Para a visualização no mapa, inclua colunas 'latitude' e 'longitude'.</p>
                 <div class="flex gap-2 items-center">
-                  <input type="file" id="csvInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-3 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
-                  <button onclick="processarRotas()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold p-3 rounded-lg transition-all" title="Sincronizar ou recarregar o arquivo CSV selecionado">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                  </button>
+                    <input type="file" id="csvInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-3 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
+                    <button onclick="processarRotas()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold p-3 rounded-lg transition-all" title="Sincronizar ou recarregar o arquivo CSV selecionado">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    </button>
                 </div>
                 </div>
                 <div class="bg-gray-700/50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto">
@@ -185,7 +214,7 @@
                     <button onclick="saveConfigAndContinue()" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg text-sm">Salvar e Continuar →</button>
                 </div>
             </div>
-            </div>
+          </div>
         </div>
 
         <!-- STEP 3: Sincronizar QR/Gaiola -->
@@ -197,10 +226,10 @@
                     <label class="block text-lg font-semibold mb-3">Arquivo de Sincronização</label>
                     <p class="text-sm text-gray-400 mb-4">CSV de-para para vincular rotas aos QR Codes e/ou definir veículos</p>
                     <div class="flex gap-2 items-center">
-                      <input type="file" id="optimizationCsvInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-3 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-yellow-600 file:text-white hover:file:bg-yellow-700" />
-                      <button onclick="processarOtimizacao()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold p-3 rounded-lg transition-all" title="Sincronizar ou recarregar o arquivo QR/Gaiola">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                      </button>
+                        <input type="file" id="optimizationCsvInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-3 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-yellow-600 file:text-white hover:file:bg-yellow-700" />
+                        <button onclick="processarOtimizacao()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold p-3 rounded-lg transition-all" title="Sincronizar ou recarregar o arquivo QR/Gaiola">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        </button>
                     </div>
                     </div>
                     <div class="bg-gray-700/50 rounded-lg p-6 mb-6">
@@ -241,7 +270,7 @@
                 <div class="flex justify-between items-center mb-4">
                   <h3 class="text-xl font-semibold">📱 Relatório WhatsApp</h3>
                   <div class="flex gap-2">
-                    <button onclick="copiarRelatorio()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm">📋 Copiar</button>
+                    <button onclick="copiarRelatorio(event)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm">📋 Copiar</button>
                     <button onclick="exportarTXT()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg text-sm">💾 TXT</button>
                   </div>
                 </div>
@@ -251,7 +280,7 @@
               </div>
             </div>
             <div class="flex flex-wrap justify-end gap-3">
-              <button onclick="saveCurrentDistribution()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg">💾 Salvar</button>
+              <button onclick="saveCurrentDistribution(event)" class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg">💾 Salvar no Histórico</button>
               <button onclick="exportarResultado()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">📥 CSV</button>
               <button onclick="reiniciarProcesso()" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-lg">🔄 Reiniciar</button>
             </div>
@@ -339,6 +368,9 @@
     </div>
 </div>
 
+<!-- Toast Notification Container -->
+<div id="toast-container"></div>
+
 <script>
     // State management
     let currentStep = 0;
@@ -361,6 +393,18 @@
     let tokenClient;
     let accessToken = null;
 
+    // --- Toast Notification System ---
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 4000);
+    }
+    
     // --- Tab Navigation ---
     function goToStep(stepIndex) {
         const targetTab = document.querySelector(`.tab-btn[data-step="${stepIndex}"]`);
@@ -423,7 +467,7 @@
     function processarRotas() {
         const arquivo = document.getElementById('csvInput').files[0];
         if (!arquivo) {
-            alert('Por favor, selecione um arquivo de rotas primeiro.');
+            showToast('Por favor, selecione um arquivo de rotas primeiro.', 'error');
             return;
         }
         Papa.parse(arquivo, {
@@ -442,7 +486,7 @@
                 };
 
                 if (!hMap.route) {
-                    alert("Erro: A coluna de rota ('route', 'rota') não foi encontrada no CSV.");
+                    showToast("Erro: A coluna de rota ('route', 'rota') não foi encontrada.", 'error');
                     return;
                 }
 
@@ -461,7 +505,7 @@
                 renderRotasPreview();
                 document.getElementById('btnContinuar1').disabled = false;
             },
-            error: (error) => alert("Erro ao processar o CSV: " + error.message)
+            error: (error) => showToast("Erro ao processar o CSV: " + error.message, 'error')
         });
     }
 
@@ -483,7 +527,7 @@
             html += `<li class="text-gray-300 flex justify-between">
                         <span class="font-semibold text-yellow-400">${routeId}</span>
                         <span class="text-gray-500">${count} ${count > 1 ? 'pacotes' : 'pacote'}</span>
-                     </li>`;
+                       </li>`;
         });
         if (routeCount > 10) html += `<li class="text-gray-500 italic">... e mais ${routeCount - 10} rotas</li>`;
         html += '</ul>';
@@ -583,7 +627,7 @@
     function processarFidelityRules() {
         const arquivo = document.getElementById('fidelityRulesInput').files[0];
         if (!arquivo) {
-            alert('Por favor, selecione um arquivo de regras de fidelidade primeiro.');
+            showToast('Por favor, selecione um arquivo de regras de fidelidade.', 'error');
             return;
         }
         Papa.parse(arquivo, {
@@ -650,9 +694,9 @@
 
                 saveConfig();
                 updateFidelityStatusUI();
-                alert(`✓ ${ruleCount} regras de local/fidelidade carregadas e salvas.`);
+                showToast(`✓ ${ruleCount} regras de fidelidade carregadas.`, 'success');
             },
-            error: (err) => alert("Erro ao processar CSV de regras: " + err.message)
+            error: (err) => showToast("Erro ao processar CSV de regras: " + err.message, 'error')
         });
     }
 
@@ -665,7 +709,7 @@
             am: findHeader(h, ['am']),
             pm: findHeader(h, ['pm'])
         };
-        if (!hMap.cidade) { alert('Erro: O arquivo de regras não tem o formato esperado (nem TRANSPORTADORA/BAIRROS ATENDIDOS, nem CIDADE/BAIRRO).'); return; }
+        if (!hMap.cidade) { showToast('Formato do arquivo de regras inválido.', 'error'); return; }
         
         fidelityRules = {};
         results.data.forEach(row => {
@@ -683,7 +727,7 @@
         });
         saveConfig();
         updateFidelityStatusUI();
-        alert(`✓ ${Object.keys(fidelityRules).length} regras de Cidade/Bairro carregadas e salvas.`);
+        showToast(`✓ ${Object.keys(fidelityRules).length} regras Cidade/Bairro carregadas.`, 'success');
     }
 
 
@@ -720,19 +764,19 @@
 
     function processarOtimizacao() {
         if (dadosRotas.length === 0) { 
-            alert('Importe as rotas principais primeiro.'); 
+            showToast('Importe as rotas principais primeiro.', 'error'); 
             return; 
         }
         const arquivo = document.getElementById('optimizationCsvInput').files[0];
         if (!arquivo) {
-            alert('Por favor, selecione um arquivo de sincronização primeiro.');
+            showToast('Por favor, selecione um arquivo de sincronização primeiro.', 'error');
             return;
         }
         Papa.parse(arquivo, { header: true, skipEmptyLines: true, complete: parseOptimizationCSV });
     }
 
     function parseOptimizationCSV(results) {
-        if (results.errors.length) { alert('Erros ao ler o CSV de otimização.'); return; }
+        if (results.errors.length) { showToast('Erros ao ler o CSV de otimização.', 'error'); return; }
         const h = results.meta.fields;
         const hMap = {
             planned: findHeader(h, ['plannedId', 'rota', 'ID Planejado']),
@@ -741,7 +785,7 @@
             detail: findHeader(h, ['detalhe do roteiro'])
         };
         if (!hMap.planned) {
-             alert('Coluna de rota planejada ("ID Planejado") não encontrada no arquivo de sincronização.');
+             showToast('Coluna de rota planejada ("ID Planejado") não encontrada.', 'error');
              return;
         }
 
@@ -774,12 +818,8 @@
                 if (m.region) r.region = m.region;
                 if (m.vehicle) {
                     r.vehicle = m.vehicle;
-                    if (['Utilitario Extra', 'Veiculo de Passeio Extra 6h','Veiculo de Passeio Extra 4h', 'Moto ME Extra'].includes(m.vehicle)) {
-                        r.carrier = 'Envios Extra';
-                        if (!r.region) { // Only set region if it wasn't parsed from detail column
-                           r.region = 'Rotas Especiais Extra';
-                        }
-                    }
+                    // Lógica de pré-atribuição de 'Envios Extra' foi removida daqui
+                    // e centralizada na função distributeRoutes para maior clareza.
                 }
             }
         });
@@ -817,7 +857,7 @@
              const key = `${city}|${neighborhood}`;
              const rule = fidelityRules[key];
              if (rule && rule[timeslot]) {
-                return rule[timeslot];
+               return rule[timeslot];
              }
         }
         
@@ -832,8 +872,30 @@
             return;
         }
         
-        const routesForDist = allRouteKeys.filter(id => !['Utilitario Extra', 'Veiculo de Passeio Extra 6h', 'Veiculo de Passeio Extra 4h', 'Moto ME Extra'].includes(grouped[id][0].vehicle));
-        const routesForExtra = allRouteKeys.filter(id => ['Utilitario Extra', 'Veiculo de Passeio Extra 6h', 'Veiculo de Passeio Extra 4h', 'Moto ME Extra'].includes(grouped[id][0].vehicle));
+        // Lógica de separação de rotas aprimorada para o caso especial
+        const specialNeighborhoods = ['FEITOSA', 'JACINTINHO', 'CRUZ DAS ALMAS'];
+        const extraVehicleTypes = ['Utilitario Extra', 'Veiculo de Passeio Extra 6h', 'Veiculo de Passeio Extra 4h', 'Moto ME Extra'];
+        
+        const routesForDist = [];
+        const routesForExtra = [];
+
+        allRouteKeys.forEach(id => {
+            const route = grouped[id][0];
+            const vehicle = route.vehicle;
+            const neighborhood = normalize(route.neighborhood || '');
+            
+            // Verifica se é o caso especial: Veiculo 4h em um dos bairros definidos
+            const isSpecialCase = vehicle === 'Veiculo de Passeio Extra 4h' && specialNeighborhoods.includes(neighborhood);
+            const isExtraVehicle = extraVehicleTypes.includes(vehicle);
+
+            // Se for um veículo Extra, mas NÃO for o caso especial, vai direto para a lista de 'Envios Extra'.
+            if (isExtraVehicle && !isSpecialCase) {
+                routesForExtra.push(id);
+            } else {
+                // Rotas normais E o caso especial vão para a distribuição padrão (para que as regras de fidelidade sejam aplicadas).
+                routesForDist.push(id);
+            }
+        });
 
         const distExtra = routesForExtra.map(id => ({ originalRouteId: id, assignedCarrier: 'Envios Extra', timeslot: getTimeslot(id) }));
         
@@ -927,7 +989,7 @@
     async function redistributeWithAI() {
         const btn = document.getElementById('aiRedistributeBtn');
         if (!dadosRotas.length) {
-            alert("Não há rotas para distribuir.");
+            showToast("Não há rotas para distribuir.", 'error');
             return;
         }
 
@@ -1007,10 +1069,10 @@
 
             renderDistribution();
             generateWhatsAppReport();
-            alert("Rotas redistribuídas com sucesso pela IA!");
+            showToast("Rotas redistribuídas com sucesso pela IA!", 'success');
 
         } catch (error) {
-            alert('Erro ao redistribuir com IA: ' + error.message);
+            showToast('Erro ao redistribuir com IA: ' + error.message, 'error');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '✨ Redistribuir com IA';
@@ -1085,9 +1147,9 @@
         window.currentReport = report;
     }
     
-    function copiarRelatorio() {
+    function copiarRelatorio(event) {
         if (!window.currentReport) {
-            alert('Nenhum relatório para copiar.');
+            showToast('Nenhum relatório para copiar.', 'info');
             return;
         }
         
@@ -1113,10 +1175,10 @@
                     btn.classList.remove('bg-green-800');
                 }, 2000);
             } else {
-                 alert('Não foi possível copiar o relatório.');
+                 showToast('Não foi possível copiar o relatório.', 'error');
             }
         } catch (err) {
-            alert('Erro ao copiar o relatório: ' + err);
+            showToast('Erro ao copiar o relatório: ' + err, 'error');
         }
 
         document.body.removeChild(textArea);
@@ -1145,12 +1207,12 @@
         link.click();
     }
 
-    function saveCurrentDistribution() {
+    function saveCurrentDistribution(event) {
         if (distributedRoutes.length === 0) return;
         saveToHistory();
         const btn = event.target; const o = btn.innerHTML;
-        btn.innerHTML = '✓ Salvo!'; btn.classList.add('bg-green-600');
-        setTimeout(() => { btn.innerHTML = o; btn.classList.remove('bg-green-600'); }, 2000);
+        btn.innerHTML = '✓ Salvo!';
+        setTimeout(() => { btn.innerHTML = o; }, 2000);
     }
 
     function reiniciarProcesso() {
@@ -1275,12 +1337,12 @@
     }
 
     function getCarrierTextColor(c) {
-        const colors = { 'RODACOOP': 'text-purple-400', 'AC2': 'text-blue-400', 'Envios Extra': 'text-yellow-400', 'LOG': 'text-green-400', 'ELOG': 'text-teal-400', 'WLS': 'text-indigo-400', 'DHL': 'text-red-400', 'MORAIS': 'text-pink-400' };
+        const colors = { 'RODACOOP': 'text-purple-400', 'AC2': 'text-blue-400', 'Envios Extra': 'text-yellow-400', 'LOG': 'text-green-400', 'ELOG': 'text-teal-400', 'WLS': 'text-indigo-400', 'DHL': 'text-red-400', 'MORAIS': 'text-pink-400', 'ECO': 'text-emerald-400' };
         return colors[c] || 'text-gray-400';
     }
 
     function exportarResumoCSV() {
-        if (distributedRoutes.length === 0) { alert('Nenhuma distribuição para exportar.'); return; }
+        if (distributedRoutes.length === 0) { showToast('Nenhuma distribuição para exportar.', 'info'); return; }
         const csvRows = [['Transportadora', 'Timeslot', 'Rotas', 'Pacotes', 'Com Fidelidade']];
         const summary = {};
         const grouped = groupRoutes(dadosRotas);
@@ -1342,13 +1404,13 @@
 
     function restoreFromHistory(id) {
         const entry = JSON.parse(localStorage.getItem('routesHistory') || '[]').find(e => e.id === id);
-        if (!entry) { alert('Distribuição não encontrada.'); return; }
+        if (!entry) { showToast('Distribuição não encontrada.', 'error'); return; }
         
         dadosRotas = entry.dadosRotas;
         mapeamentoOtimizacao = entry.mapeamentoOtimizacao;
         distributedRoutes = entry.distributedRoutes;
         fidelityRules = entry.fidelityRules || {};
-        carriers = entry.carriers || ['RODACOOP', 'AC2', 'Envios Extra', 'LOG', 'ELOG', 'WLS', 'DHL', 'MORAIS'];
+        carriers = entry.carriers || ['RODACOOP', 'AC2', 'Envios Extra', 'LOG', 'ELOG', 'WLS', 'DHL', 'MORAIS', 'ECO'];
         hasCoordinates = dadosRotas.some(r => r.lat && r.lng);
         
         resetTabs();
@@ -1372,7 +1434,7 @@
     
     function exportarHistorico() {
         const history = localStorage.getItem('routesHistory') || '[]';
-        if (history === '[]') { alert('Nenhum histórico para exportar.'); return; }
+        if (history === '[]') { showToast('Nenhum histórico para exportar.', 'info'); return; }
         const blob = new Blob([JSON.stringify(JSON.parse(history), null, 2)], { type: 'application/json' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
@@ -1395,8 +1457,8 @@
                     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 50);
                 localStorage.setItem('routesHistory', JSON.stringify(unique));
                 loadHistoryList();
-                alert(`${imported.length} distribuições importadas.`);
-            } catch (error) { alert('Erro ao importar backup: ' + error.message); }
+                showToast(`${imported.length} distribuições importadas.`, 'success');
+            } catch (error) { showToast('Erro ao importar backup: ' + error.message, 'error'); }
         };
         reader.readAsText(file);
         event.target.value = '';
@@ -1406,7 +1468,7 @@
     // STEP 7: MAP VIEW
     // ==========================================
     function getMapCarrierColor(carrier) {
-        const colors = { 'RODACOOP': '#9333ea', 'AC2': '#2563eb', 'Envios Extra': '#ca8a04', 'LOG': '#16a34a', 'ELOG': '#0d9488', 'WLS': '#4f46e5', 'DHL': '#dc2626', 'MORAIS': '#db2777' };
+        const colors = { 'RODACOOP': '#9333ea', 'AC2': '#2563eb', 'Envios Extra': '#ca8a04', 'LOG': '#16a34a', 'ELOG': '#0d9488', 'WLS': '#4f46e5', 'DHL': '#dc2626', 'MORAIS': '#db2777', 'ECO': '#10b981' };
         return colors[carrier] || '#4b5563';
     }
 
@@ -1483,15 +1545,14 @@
     }
     function handleGoogleSignIn() {
         if (!gisInited || !gapiInited) {
-            alert("A API do Google ainda não foi inicializada. Por favor, aguarde um momento e tente novamente.");
+            showToast("A API do Google ainda não foi inicializada.", 'error');
             return;
         }
         if (accessToken) { handleGoogleSignOut(); return; }
-        console.log("Current origin:", window.location.origin);
         tokenClient.callback = async (resp) => {
             if (resp.error !== undefined) {
                 console.error("Google Sign-In Error:", resp);
-                alert(`Erro na autenticação com o Google: ${resp.error}\n\nDetalhes: ${resp.details || 'Verifique a consola para mais informações.'}\n\nIsto é geralmente um problema de configuração no Google Cloud Console. Verifique se a origem do JavaScript está autorizada.`);
+                showToast(`Erro na autenticação: ${resp.error_description || resp.error}`, 'error');
                 throw(resp);
             }
             accessToken = resp.access_token;
@@ -1568,4 +1629,5 @@
 
 </body>
 </html>
+
 
