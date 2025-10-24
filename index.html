@@ -1,0 +1,2661 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Distribuidor de ROTAS AM/PM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- LeafletJS for Map View -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    @import url('https://rsms.me/inter/inter.css');
+    html { font-family: 'Inter', sans-serif; }
+    .prose { max-width: 65ch; }
+    .prose strong { font-weight: 600; }
+    .prose h3 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .prose ul { list-style: disc; padding-left: 1.5rem; margin-top: 1rem; }
+    .prose li { margin-bottom: 0.5rem; }
+  </style>
+  <style>
+    html, body {
+        height: 100%;
+        margin: 0;
+        font-family: 'Inter', sans-serif;
+    }
+    body {
+        display: flex;
+        flex-direction: column;
+    }
+    .step {
+        display: none; /* Hide all steps by default */
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        padding: 1rem 2rem;
+        animation: fadeInUp 0.5s ease-out;
+    }
+    .step.active {
+        display: flex; /* Show only the active step */
+    }
+
+    .tab-btn {
+        padding: 0.75rem 1.5rem;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s ease;
+        color: #9ca3af; /* gray-400 */
+    }
+    .tab-btn:hover {
+        background-color: #374151; /* gray-700 */
+        color: #d1d5db; /* gray-300 */
+    }
+    .tab-btn.active-tab {
+        color: #60a5fa; /* blue-400 */
+        border-bottom-color: #60a5fa; /* blue-400 */
+        font-weight: 600;
+    }
+    .tab-btn:disabled {
+        color: #4b5563; /* gray-600 */
+        cursor: not-allowed;
+        background-color: transparent;
+        border-bottom-color: transparent;
+    }
+
+    #map { height: 100%; width: 100%; border-radius: 0.5rem; z-index: 10; }
+
+    /* Toast Notification Styles */
+    #toast-container {
+        position: fixed;
+        top: 1.25rem;
+        right: 1.25rem;
+        z-index: 9999; /* Ensure toast is on top */
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    #toast-container .toast {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        color: white;
+        min-width: 250px;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        animation: slideInRight 0.3s ease-out, fadeOut 0.5s ease-in 3.5s forwards;
+        opacity: 1;
+        transform: translateX(0);
+    }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+    .toast.toast-success { background-color: #166534; } /* green-800 */
+    .toast.toast-error { background-color: #991b1b; } /* red-800 */
+    .toast.toast-info { background-color: #1d4ed8; } /* blue-700 */
+
+        /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+    .modal-content {
+        background-color: #1f2937; /* gray-800 */
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        transform: scale(0.95);
+        transition: transform 0.3s ease;
+    }
+     .modal-overlay.active .modal-content {
+        transform: scale(1);
+     }
+
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+
+<div class="w-full max-w-screen-2xl mx-auto flex flex-col flex-grow p-4 h-full">
+    <!-- Tab Navigation -->
+    <div id="tab-navigation" class="flex border-b border-gray-700 mb-4 flex-wrap">
+        <button onclick="goToStep(0)" class="tab-btn active-tab" data-step="0">1. Início</button>
+        <button onclick="goToStep(1)" class="tab-btn" data-step="1" disabled>2. Importar</button>
+        <button onclick="goToStep(2)" class="tab-btn" data-step="2" disabled>3. Configurações</button>
+        <button onclick="goToStep(3)" class="tab-btn" data-step="3" disabled>4. Sincronizar</button>
+        <button onclick="goToStep(4)" class="tab-btn" data-step="4" disabled>5. Resultados</button>
+        <button onclick="goToStep(5)" class="tab-btn" data-step="5" disabled>📊 Resumo</button>
+        <button onclick="goToStep(7)" class="tab-btn" data-step="7" id="mapViewTabBtn" disabled>🗺️ Mapa</button>
+        <button onclick="goToStep(6)" class="tab-btn ml-auto" data-step="6">📂 Histórico</button>
+    </div>
+
+    <!-- Tab Content Area -->
+    <div id="tab-content-container" class="flex-grow relative overflow-y-auto">
+        <!-- STEP 0: Boas-vindas -->
+        <div class="step active" id="step0">
+          <div class="max-w-2xl text-center">
+            <div class="mb-8">
+              <svg class="w-24 h-24 mx-auto text-blue-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+              </svg>
+              <h1 class="text-5xl font-bold text-blue-400 mb-4">Distribuidor de ROTAS AM/PM</h1>
+              <p class="text-xl text-gray-300 mb-8">Importe, distribua e gerencie rotas para Maceió (AL) e Região Metropolitana</p>
+            </div>
+            <div class="bg-gray-800/50 backdrop-blur rounded-lg p-8 mb-8 text-left">
+              <h2 class="text-2xl font-semibold mb-4 text-blue-300">Como funciona?</h2>
+              <ol class="space-y-3 text-gray-300">
+                <li class="flex items-start"><span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold mr-3 flex-shrink-0">1</span><span>Importe o arquivo CSV com as rotas principais</span></li>
+                <li class="flex items-start"><span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold mr-3 flex-shrink-0">2</span><span>Defina as transportadoras e carregue as regras de fidelidade.</span></li>
+                <li class="flex items-start"><span class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold mr-3 flex-shrink-0">3</span><span>Visualize, ajuste, exporte e obtenha análises ✨ IA da distribuição final.</span></li>
+              </ol>
+            </div>
+            <div class="flex gap-4 justify-center">
+              <button onclick="startProcess()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg px-12 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg">Vamos Começar! →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 1: Importar Arquivo Principal -->
+        <div class="step" id="step1">
+            <div class="max-w-3xl w-full">
+            <h2 class="text-3xl font-bold text-blue-400 mb-6">Passo 1: Arquivo Principal de Rotas</h2>
+            <div class="bg-gray-800 p-8 rounded-lg shadow-xl">
+                <div class="mb-6">
+                <label class="block text-lg font-semibold mb-3">Selecione o CSV com as rotas</label>
+                <p class="text-sm text-gray-400 mb-4">Arquivo contendo todas as paradas. Para a visualização no mapa, inclua colunas 'latitude' e 'longitude'.</p>
+                <div class="flex gap-2 items-center">
+                    <input type="file" id="csvInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-3 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
+                    <button onclick="processarRotas()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold p-3 rounded-lg transition-all" title="Sincronizar ou recarregar o arquivo CSV selecionado">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    </button>
+                </div>
+                </div>
+                <div class="bg-gray-700/50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto">
+                <h3 class="font-semibold mb-3 text-blue-300">Rotas Identificadas</h3>
+                <div id="rotasPreview" class="text-sm text-gray-300"><p class="text-gray-500 italic">Nenhum arquivo selecionado ainda</p></div>
+                </div>
+                <div class="flex justify-end gap-4">
+                <button onclick="processarEContinuar()" id="btnContinuar1" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled>Continuar →</button>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: Configurações -->
+        <div class="step" id="step2">
+          <div class="max-w-5xl w-full">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h2 class="text-3xl font-bold text-blue-400 mb-1">Passo 2: Configurações e Regras</h2>
+                    <p class="text-gray-400 text-sm">Defina transportadoras e regras de fidelidade para a distribuição.</p>
+                </div>
+                <div id="configStatusBadge" class="text-xs px-3 py-1 rounded-full bg-gray-700 text-gray-400 whitespace-nowrap">Não configurado</div>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-lg shadow-xl">
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-blue-300">Gerenciar Transportadoras</h3>
+                        <div class="bg-gray-700/50 rounded-lg p-3 mb-4">
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" id="newCarrierInput" placeholder="Nome da transportadora" class="flex-1 bg-gray-600 text-white rounded px-3 py-2 text-sm" />
+                            <button onclick="addCarrier()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-all text-sm">➕ Adicionar</button>
+                        </div>
+                        <div id="carriersList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-semibold text-blue-300">Regras de Fidelidade (Opcional)</h3>
+                            <button onclick="clearFidelityRules()" class="text-xs text-red-400 hover:text-red-300">🗑️ Limpar Regras</button>
+                        </div>
+                        <!-- UI Simplificada - Sem botões de opção -->
+                        <p class="text-xs text-gray-400 mb-3">Carregue o CSV com regras (TRANSPORTADORA, BAIRROS ATENDIDOS):</p>
+                        <div class="flex gap-2 items-center">
+                          <input type="file" id="fidelityRulesInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-2 text-sm cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700" />
+                          <button onclick="processarFidelityRules()" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold p-2.5 rounded-lg transition-all" title="Carregar arquivo de fidelidade">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                          </button>
+                        </div>
+                        <div class="bg-gray-700/50 rounded-lg p-4 mt-4">
+                            <h3 class="font-semibold mb-2 text-purple-300 text-sm">Status das Regras</h3>
+                            <!-- UI de Status Simplificada -->
+                            <div id="fidelityStatus" class="text-sm text-gray-300">
+                                <p class="text-gray-500 italic text-xs">Nenhuma regra de fidelidade carregada</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button onclick="pularConfiguracoes()" class="bg-gray-600 hover:bg-gray-500 text-white px-5 py-2 rounded-lg text-sm">Pular Configurações</button>
+                    <button onclick="saveConfigAndContinue()" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg text-sm">Salvar e Continuar →</button>
+                </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- STEP 3: Sincronizar QR/Gaiola -->
+        <div class="step" id="step3">
+            <div class="max-w-3xl w-full">
+                <h2 class="text-3xl font-bold text-blue-400 mb-6">Passo 3: Sincronização com QR/Gaiola</h2>
+                <div class="bg-gray-800 p-8 rounded-lg shadow-xl">
+                    <div class="mb-6">
+                    <label class="block text-lg font-semibold mb-3">Arquivo de Sincronização</label>
+                    <p class="text-sm text-gray-400 mb-4">CSV de-para para vincular rotas aos QR Codes e/ou definir veículos</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="file" id="optimizationCsvInput" accept=".csv" class="w-full bg-gray-700 text-gray-300 rounded-lg px-4 py-3 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-yellow-600 file:text-white hover:file:bg-yellow-700" />
+                        <button onclick="processarOtimizacao()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold p-3 rounded-lg transition-all" title="Sincronizar ou recarregar o arquivo QR/Gaiola">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        </button>
+                    </div>
+                    </div>
+                    <div class="bg-gray-700/50 rounded-lg p-6 mb-6">
+                    <h3 class="font-semibold mb-3 text-yellow-300">Status da Sincronização</h3>
+                    <div id="syncStatus" class="text-sm text-gray-300"><p class="text-gray-500 italic">Nenhum arquivo de sincronização carregado</p></div>
+                    </div>
+                    <div class="flex justify-end gap-3">
+                    <button onclick="pularSincronizacao()" class="bg-gray-600 hover:bg-gray-500 text-white px-6 py-3 rounded-lg">Pular este passo</button>
+                    <button onclick="sincronizarEContinuar()" id="btnContinuar3" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3 rounded-lg">Continuar →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 4: Resultado Final -->
+        <div class="step" id="step4">
+          <div class="max-w-7xl w-full">
+            <h2 class="text-3xl font-bold text-green-400 mb-4">Resultados da Distribuição</h2>
+             <p class="text-sm text-purple-300 mb-4" id="activeRuleIndicator"></p> <!-- Mantido mas vazio -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div class="bg-gray-800 p-6 rounded-lg shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-xl font-semibold">Rotas Distribuídas</h3>
+                  <div class="flex gap-2">
+                    <button onclick="redistributeWithAI()" id="aiRedistributeBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2">✨ Redistribuir com IA</button>
+                    <button onclick="redistribuir()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm transition-all">🔄 Redistribuir</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-12 gap-3 px-2 pb-2 text-xs text-gray-400 font-semibold border-b border-gray-700">
+                    <div class="col-span-3">Rota</div>
+                    <div class="col-span-2">Região</div>
+                    <div class="col-span-2">Veículo</div>
+                    <div class="col-span-3">Atribuir</div>
+                    <div class="col-span-2 text-right">Transportadora</div>
+                </div>
+                <div id="distributionResult" class="max-h-[55vh] overflow-y-auto pt-2"><p class="text-gray-500 italic">Processando distribuição...</p></div>
+              </div>
+              <div class="bg-gray-800 p-6 rounded-lg shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-xl font-semibold">📱 Relatório WhatsApp</h3>
+                  <div class="flex gap-2">
+                    <button onclick="copiarRelatorio(event)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm">📋 Copiar</button>
+                    <button onclick="exportarTXT()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg text-sm">💾 TXT</button>
+                  </div>
+                </div>
+                <div class="bg-gray-900 rounded-lg p-4 max-h-[60vh] overflow-y-auto">
+                  <pre id="whatsappReport" class="text-sm text-gray-300 whitespace-pre-wrap font-mono">Processando relatório...</pre>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap justify-end gap-3">
+              <!-- Botão modificado -->
+              <button onclick="saveCurrentDistribution(event)" class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg">💾 Salvar e Analisar Histórico</button>
+              <button onclick="exportarResultado()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">📥 CSV</button>
+              <button onclick="reiniciarProcesso()" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-lg">🔄 Reiniciar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 5: Resumo Detalhado -->
+        <div class="step" id="step5">
+          <div class="max-w-6xl w-full">
+            <h2 class="text-3xl font-bold text-purple-400 mb-4">📊 Resumo Detalhado</h2>
+            <div class="bg-gray-800 p-8 rounded-lg shadow-xl">
+              <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                <h3 class="text-xl font-semibold">Breakdown por Transportadora</h3>
+                <div class="flex gap-2">
+                  <button onclick="getAIAnalysis()" id="aiAnalysisBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2">✨ Gerar Análise com IA</button>
+                  <button onclick="exportarResumoCSV()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">💾 Exportar Resumo CSV</button>
+                </div>
+              </div>
+              <!-- Summary breakdown com botão de mensagem -->
+              <div id="summaryBreakdown" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2"></div>
+              <div id="aiAnalysisSection" class="mt-6 hidden">
+                <h3 class="text-xl font-semibold mb-4 text-indigo-300 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                    Análise e Sugestões da IA
+                </h3>
+                <div id="aiAnalysisResult" class="bg-gray-900/50 border border-indigo-500/50 p-6 rounded-lg min-h-[150px] text-gray-300 prose prose-sm max-w-none"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- STEP 6: Histórico -->
+        <div class="step" id="step6">
+          <div class="max-w-6xl w-full">
+            <h2 class="text-3xl font-bold text-purple-400 mb-4">📂 Histórico de Distribuições</h2>
+            <div class="bg-gradient-to-r from-blue-900/50 to-purple-900/50 p-6 rounded-lg shadow-xl mb-6 border border-blue-700/50">
+              <div class="flex flex-wrap justify-between items-center gap-4">
+                <div>
+                  <h3 class="text-xl font-semibold flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12.545 10.239v3.821h5.445c-.712 2.315-2.647 3.972-5.445 3.972a6.033 6.033 0 110-12.064c1.498 0 2.866.549 3.921 1.453l2.814-2.814A9.969 9.969 0 0012.545 2C7.021 2 2.543 6.477 2.543 12s4.478 10 10.002 10c8.396 0 10.249-7.85 9.426-11.748l-9.426-.013z"/></svg>
+                    Backup no Google Drive
+                  </h3>
+                  <p class="text-sm text-gray-400 mt-1" id="driveStatus">Conecte sua conta Google para backup automático na nuvem</p>
+                </div>
+                <div>
+                  <button id="googleSignInBtn" onclick="handleGoogleSignIn()" class="bg-white hover:bg-gray-100 text-gray-800 font-semibold px-6 py-3 rounded-lg flex items-center gap-2 shadow-lg">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                    <span id="googleBtnText">Conectar Google</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-lg shadow-xl mb-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold">Distribuições Salvas</h3>
+                <div class="flex gap-2">
+                  <button onclick="exportarHistorico()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">💾 Exportar Backup</button>
+                  <button onclick="importarHistorico()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm">📥 Importar Backup</button>
+                  <input type="file" id="importHistoryInput" accept=".json" class="hidden" onchange="handleImportHistory(event)" />
+                </div>
+              </div>
+              <div id="historyList" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2"><p class="text-gray-500 italic">Nenhuma distribuição salva ainda.</p></div>
+            </div>
+             <div class="flex justify-end gap-4">
+                <button onclick="limparHistorico()" class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg">🗑️ Limpar Todo Histórico</button>
+             </div>
+          </div>
+        </div>
+
+        <!-- STEP 7: Map View -->
+        <div class="step" id="step7">
+            <div class="w-full h-full flex flex-col p-0">
+                <div class="mb-4">
+                    <h2 class="text-3xl font-bold text-teal-400 mb-2">🗺️ Visualização no Mapa</h2>
+                    <p class="text-gray-400">Distribuição geográfica das rotas por transportadora</p>
+                </div>
+                <div class="flex-grow flex gap-4 min-h-0">
+                    <div class="w-3/4 h-full bg-gray-800 rounded-lg shadow-xl relative"><div id="map"></div></div>
+                    <div class="w-1/4 h-full bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col">
+                        <h3 class="text-xl font-semibold mb-4">Filtros e Legenda</h3>
+                        <div id="map-controls" class="flex-grow overflow-y-auto space-y-2 pr-2"><p class="text-gray-500 italic">Carregando filtros...</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification Container -->
+<div id="toast-container"></div>
+
+<!-- Modal for AI Generated WhatsApp Message -->
+<div id="whatsapp-modal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-semibold text-blue-300" id="whatsapp-modal-title">Mensagem WhatsApp Gerada</h3>
+      <button onclick="closeWhatsAppModal()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+    <div class="bg-gray-900 rounded p-4 mb-4 max-h-60 overflow-y-auto">
+      <pre id="whatsapp-modal-text" class="text-sm text-gray-300 whitespace-pre-wrap font-mono"></pre>
+    </div>
+     <div class="text-center">
+        <button onclick="copyWhatsAppMessage(this)" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg text-sm">📋 Copiar Mensagem</button>
+     </div>
+  </div>
+</div>
+
+<!-- NOVO Modal for AI History Analysis -->
+<div id="ai-history-modal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-semibold text-purple-300" id="ai-history-modal-title">Análise do Histórico</h3>
+      <button onclick="closeHistoryModal()" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+    </div>
+    <div id="ai-history-modal-text" class="bg-gray-900 rounded p-4 mb-4 max-h-60 overflow-y-auto text-sm text-gray-300 prose prose-sm max-w-none">
+        <!-- AI suggestions will be injected here -->
+    </div>
+     <div class="text-center">
+        <button onclick="closeHistoryModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm">Entendido</button>
+     </div>
+  </div>
+</div>
+
+
+<script>
+    // State management
+    let currentStep = 0;
+    let dadosRotas = [];
+    let hasCoordinates = false;
+    let mapeamentoOtimizacao = {};
+    let carriers = ['RodaCoop', 'AC2 LOGISTICA', 'Envios Extra', 'LOG SERVICOS', 'E-LOG', 'WLS CARGO', 'DHL', 'JULIANA APARECIDA DE MORAIS TRANSPORTES', 'ECO'];
+    let distributedRoutes = [];
+    // Revertido para um único objeto
+    let fidelityRules = {};
+    // Estado manual removido
+    let configSaved = false;
+    let map = null;
+    let markerLayer = null;
+
+    // Google Drive API Configuration
+     const CLIENT_ID = '318102544281-gp082mmljlgk41le34i69g1lrn6rsgm8.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+    const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+    let gapiInited = false;
+    let gisInited = false;
+    let tokenClient;
+    let accessToken = null;
+
+    // --- Toast Notification System ---
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 4000);
+    }
+
+    // --- Lógica de Rodízio REMOVIDA ---
+
+    // Função getActiveFidelityRules simplificada
+    function getActiveFidelityRules() {
+        return fidelityRules || {};
+    }
+
+     // --- Função handleFidelityOptionChange REMOVIDA ---
+
+
+    // --- Tab Navigation ---
+    function goToStep(stepIndex) {
+        const targetTab = document.querySelector(`.tab-btn[data-step="${stepIndex}"]`);
+        if (targetTab.disabled) return;
+
+        currentStep = stepIndex;
+
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active-tab'));
+        targetTab.classList.add('active-tab');
+
+        document.querySelectorAll('.step').forEach(panel => panel.classList.remove('active'));
+        document.getElementById(`step${stepIndex}`).classList.add('active');
+
+        // Step-specific actions
+        switch (stepIndex) {
+            case 2:
+                loadSavedConfig(); // Carrega carriers e fidelityRules (singular)
+                // Lógica de radio button removida
+                renderCarriersList();
+                updateFidelityStatusUI(); // UI simplificada
+                updateConfigStatusBadge();
+                break;
+            case 4:
+                // Tenta limpar o indicador, mas verifica se ele existe primeiro
+                const indicator = document.getElementById('activeRuleIndicator');
+                if (indicator) {
+                    indicator.textContent = ''; // Limpa o indicador
+                }
+                 // Só distribui se houver rotas
+                 if (dadosRotas.length > 0) {
+                     setTimeout(() => distributeRoutes(), 100);
+                 } else {
+                     document.getElementById('distributionResult').innerHTML = '<p class="text-gray-500 italic">Importe as rotas na Etapa 2 primeiro.</p>';
+                     document.getElementById('whatsappReport').textContent = 'Aguardando rotas...';
+                 }
+                break;
+            case 5:
+                if (distributedRoutes.length > 0) {
+                     generateSummaryBreakdown();
+                 } else {
+                     document.getElementById('summaryBreakdown').innerHTML = '<p class="text-gray-500 italic">Distribua as rotas na Etapa 4 primeiro.</p>';
+                 }
+                break;
+            case 6:
+                loadHistoryList();
+                break;
+            case 7:
+                 if (distributedRoutes.length > 0) {
+                     initializeMap();
+                 } else {
+                      document.getElementById('map').innerHTML = `<div class="flex items-center justify-center h-full"><p class="text-gray-500">Distribua as rotas na Etapa 4 primeiro.</p></div>`;
+                      document.getElementById('map-controls').innerHTML = '<p class="text-gray-500 italic">Sem dados para filtrar.</p>';
+                 }
+                break;
+        }
+    }
+
+
+    function startProcess() {
+        enableTab(1);
+        goToStep(1);
+    }
+
+    function enableTab(stepIndex) {
+        const tabButton = document.querySelector(`.tab-btn[data-step="${stepIndex}"]`);
+        if (tabButton) tabButton.disabled = false;
+    }
+
+    function resetTabs() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            const step = parseInt(btn.dataset.step);
+            if (step > 0 && step !== 6) {
+                btn.disabled = true;
+            }
+        });
+        document.getElementById('mapViewTabBtn').disabled = true;
+    }
+
+    // --- Step 1: Import ---
+    document.getElementById('csvInput').addEventListener('change', e => e.target.files[0] && processarRotas());
+
+    function processarRotas() {
+        const arquivo = document.getElementById('csvInput').files[0];
+        if (!arquivo) {
+            showToast('Por favor, selecione um arquivo de rotas primeiro.', 'error');
+            return;
+        }
+        console.log("Processando arquivo de rotas:", arquivo.name);
+
+        Papa.parse(arquivo, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                if (results.errors && results.errors.length > 0) {
+                     console.error("Erro de parsing PapaParse:", results.errors);
+                     showToast(`Erro ao ler CSV de Rotas: ${results.errors[0].message}`, 'error');
+                     return;
+                }
+                if (!results.meta || !results.meta.fields || results.meta.fields.length === 0) {
+                    console.error("Cabeçalhos não encontrados ou inválidos:", results.meta);
+                    showToast('Não foi possível ler os cabeçalhos do CSV de Rotas.', 'error');
+                    return;
+                }
+
+                let headers = results.meta.fields.map(h => h ? h.trim() : '');
+                if (headers[0] && headers[0].startsWith('\ufeff')) {
+                    headers[0] = headers[0].replace('\ufeff', '');
+                }
+                const normalizedHeaders = headers.map(h => h.toUpperCase());
+                console.log("Cabeçalhos encontrados:", headers);
+
+                const routeHeaderIndex = findHeader(normalizedHeaders, ['route', 'rota']);
+                const cityHeaderIndex = findHeader(normalizedHeaders, ['city', 'cidade']);
+                const neighborhoodHeaderIndex = findHeader(normalizedHeaders, ['neighborhood', 'bairro']);
+                const latitudeHeaderIndex = findHeader(normalizedHeaders, ['latitude', 'lat']);
+                const longitudeHeaderIndex = findHeader(normalizedHeaders, ['longitude', 'lng', 'lon']);
+
+                const routeHeaderName = routeHeaderIndex !== -1 ? headers[routeHeaderIndex] : null;
+
+                console.log("Nome da coluna de rota encontrada:", routeHeaderName);
+
+                if (routeHeaderIndex === -1) {
+                    showToast("Erro: A coluna de rota ('route' ou 'rota') não foi encontrada. Verifique os nomes no CSV.", 'error');
+                    console.log("Aliases procurados:", ['route', 'rota']);
+                    console.log("Cabeçalhos normalizados onde procurou:", normalizedHeaders);
+                    return;
+                }
+
+                const cityHeaderName = cityHeaderIndex !== -1 ? headers[cityHeaderIndex] : null;
+                const neighborhoodHeaderName = neighborhoodHeaderIndex !== -1 ? headers[neighborhoodHeaderIndex] : null;
+                const latitudeHeaderName = latitudeHeaderIndex !== -1 ? headers[latitudeHeaderIndex] : null;
+                const longitudeHeaderName = longitudeHeaderIndex !== -1 ? headers[longitudeHeaderIndex] : null;
+
+                hasCoordinates = !!(latitudeHeaderName && longitudeHeaderName);
+
+                // --- CORREÇÃO QUOTA: Mapeia apenas os dados necessários ---
+                const mappedData = results.data.map((linha, index) => {
+                    const originalRouteIdValue = linha[routeHeaderName];
+
+                    let city = cityHeaderName && linha[cityHeaderName] ? linha[cityHeaderName].trim() : '';
+                    let neighborhood = neighborhoodHeaderName && linha[neighborhoodHeaderName] ? linha[neighborhoodHeaderName].trim() : '';
+
+                    // --- REGRA MARECHAL DEODORO (REMOVIDA) ---
+                    // if (normalize(city) === 'MARECHAL DEODORO') {
+                    //     neighborhood = 'MARECHAL';
+                    //     console.log(`Linha ${index}: Cidade Marechal Deodoro FORÇADA para bairro MARECHAL.`);
+                    // }
+                    // --- FIM DA REGRA ---
+
+                    return {
+                        // Não usa mais "...linha"
+                        originalRouteId: originalRouteIdValue,
+                        routeId: originalRouteIdValue,
+                        city: city,
+                        neighborhood: neighborhood,
+                        lat: latitudeHeaderName && linha[latitudeHeaderName] ? parseFloat(String(linha[latitudeHeaderName]).replace(',', '.')) : null,
+                        lng: longitudeHeaderName && linha[longitudeHeaderName] ? parseFloat(String(linha[longitudeHeaderName]).replace(',', '.')) : null,
+                        vehicle: null, // Será preenchido na Etapa 3
+                        carrier: null, // Será preenchido na Etapa 4
+                        region: null,  // Será preenchido na Etapa 3
+                    };
+                });
+                // --- FIM DA CORREÇÃO QUOTA ---
+
+                dadosRotas = mappedData.filter(r => r.originalRouteId !== null && r.originalRouteId !== undefined && String(r.originalRouteId).trim() !== '');
+
+                console.log("Total de linhas no CSV:", results.data.length);
+                console.log("Total de rotas após mapeamento e filtro:", dadosRotas.length);
+
+                if (dadosRotas.length === 0 && results.data.length > 0) {
+                    showToast("Aviso: Nenhuma rota válida encontrada. Verifique se a coluna '"+ routeHeaderName + "' contém valores.", 'info');
+                } else if (dadosRotas.length > 0) {
+                    showToast("Arquivo de rotas processado!", 'success');
+                }
+
+                renderRotasPreview();
+                document.getElementById('btnContinuar1').disabled = dadosRotas.length === 0;
+
+            },
+            error: (error) => {
+                console.error("Erro geral PapaParse:", error);
+                showToast("Erro ao processar o CSV: " + error.message, 'error');
+            }
+        });
+    }
+
+
+    function renderRotasPreview() {
+        const container = document.getElementById('rotasPreview');
+        const groupedRoutes = groupRoutes(dadosRotas);
+        const routeCount = Object.keys(groupedRoutes).length;
+        const packageCount = dadosRotas.length; // Agora 'dadosRotas' é 1 por pacote
+
+        let html = `<div class="mb-4 p-3 bg-green-900/30 border border-green-600 rounded-lg">
+            <p class="text-green-400 font-semibold">✓ Arquivo processado com sucesso!</p>
+            <!-- CORREÇÃO: A contagem de rotas é 'routeCount', pacotes é 'packageCount' -->
+            <p class="text-sm text-gray-300 mt-1">${routeCount} rotas encontradas | ${packageCount} pacotes no total</p>
+            ${hasCoordinates ? '<p class="text-xs text-teal-400 mt-1">✓ Coordenadas de mapa encontradas.</p>' : '<p class="text-xs text-yellow-500 mt-1">⚠ Coordenadas de mapa não encontradas.</p>'}
+        </div>`;
+
+        html += '<ul class="space-y-2 max-h-48 overflow-y-auto pr-2">';
+        Object.keys(groupedRoutes).sort().slice(0, 10).forEach(routeId => {
+            const count = groupedRoutes[routeId].length; // Conta os pacotes dentro do grupo
+            html += `<li class="text-gray-300 flex justify-between">
+                        <span class="font-semibold text-yellow-400">${routeId}</span>
+                        <span class="text-gray-500">${count} ${count > 1 ? 'pacotes' : 'pacote'}</span>
+                       </li>`;
+        });
+        if (routeCount > 10) html += `<li class="text-gray-500 italic">... e mais ${routeCount - 10} rotas</li>`;
+        html += '</ul>';
+        container.innerHTML = html;
+    }
+
+    function processarEContinuar() {
+        if (dadosRotas.length > 0) {
+            enableTab(2);
+            goToStep(2);
+        }
+    }
+
+    // --- Utility & Step 2: Config ---
+    const normalize = (str) => str.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    function findHeader(normalizedHeaders, aliases) {
+        const lowerCaseAliases = aliases.map(a => a.toLowerCase());
+        for (let i = 0; i < normalizedHeaders.length; i++) {
+            if (normalizedHeaders[i] && lowerCaseAliases.includes(normalizedHeaders[i].toLowerCase())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+
+    function groupRoutes(routes) {
+        const grouped = {};
+        routes.forEach(rotaObj => {
+            const routeId = rotaObj.originalRouteId;
+            if (!routeId) return;
+            if (!grouped[routeId]) {
+                grouped[routeId] = [];
+            }
+            grouped[routeId].push(rotaObj);
+        });
+        return grouped;
+    }
+
+    function loadSavedConfig() {
+        const savedConfig = localStorage.getItem('appConfig');
+        if (savedConfig) {
+            try {
+                const config = JSON.parse(savedConfig);
+                carriers = config.carriers || ['RodaCoop', 'AC2 LOGISTICA', 'Envios Extra', 'LOG SERVICOS', 'E-LOG', 'WLS CARGO', 'DHL', 'JULIANA APARECIDA DE MORAIS TRANSPORTES', 'ECO'];
+                // Revertido para fidelityRules
+                fidelityRules = config.fidelityRules || {};
+                 // Ignora manualFidelityOption
+            } catch (e) {
+                console.error('Erro ao carregar configurações:', e);
+                fidelityRules = {};
+                carriers = ['RodaCoop', 'AC2 LOGISTICA', 'Envios Extra', 'LOG SERVICOS', 'E-LOG', 'WLS CARGO', 'DHL', 'JULIANA APARECIDA DE MORAIS TRANSPORTES', 'ECO'];
+            }
+        } else {
+             fidelityRules = {};
+             carriers = ['RodaCoop', 'AC2 LOGISTICA', 'Envios Extra', 'LOG SERVICOS', 'E-LOG', 'WLS CARGO', 'DHL', 'JULIANA APARECIDA DE MORAIS TRANSPORTES', 'ECO'];
+        }
+    }
+
+
+    function saveConfig() {
+        localStorage.setItem('appConfig', JSON.stringify({
+            carriers,
+            fidelityRules, // Salva fidelityRules (singular)
+            // Não salva manualFidelityOption
+            lastUpdated: new Date().toISOString()
+        }));
+        updateConfigStatusBadge();
+    }
+
+    function updateConfigStatusBadge() {
+        const badge = document.getElementById('configStatusBadge');
+        const saved = localStorage.getItem('appConfig');
+        if (saved) {
+            const lastUpdated = new Date(JSON.parse(saved).lastUpdated).toLocaleString('pt-BR');
+            badge.className = 'text-xs px-3 py-1 rounded-full bg-green-900/50 border border-green-600 text-green-400 whitespace-nowrap';
+            badge.textContent = `✓ Salvo em ${lastUpdated}`;
+        } else {
+            badge.className = 'text-xs px-3 py-1 rounded-full bg-gray-700 text-gray-400 whitespace-nowrap';
+            badge.textContent = 'Não configurado';
+        }
+    }
+
+    function renderCarriersList() {
+         // Ordena a lista de carriers antes de renderizar
+        carriers.sort((a, b) => a.localeCompare(b));
+        document.getElementById('carriersList').innerHTML = carriers.map((c, i) => {
+             // Encontra o índice real na lista ordenada
+            const originalIndex = carriers.indexOf(c);
+            return `
+            <div class="flex items-center justify-between bg-gray-600 rounded px-3 py-2">
+                <span class="text-white font-semibold text-sm">${c}</span>
+                <button onclick="removeCarrier(${originalIndex})" class="text-red-400 hover:text-red-300 text-xs">✕ Remover</button>
+            </div>`;
+        }).join('');
+    }
+
+    function addCarrier() {
+        const input = document.getElementById('newCarrierInput');
+        const name = input.value.trim().toUpperCase();
+        const nameOriginal = input.value.trim();
+        const exists = carriers.some(c => c.toUpperCase() === name);
+
+        if (nameOriginal && !exists) {
+            carriers.push(nameOriginal);
+            // carriers.sort((a, b) => a.localeCompare(b)); // A ordenação já acontece no renderCarriersList
+            input.value = '';
+            saveConfig();
+            renderCarriersList(); // Renderiza a lista (que será ordenada)
+        } else if (!nameOriginal) {
+             showToast("Digite um nome para a transportadora.", "info");
+        } else {
+             showToast(`Transportadora "${name}" já existe.`, "info");
+        }
+    }
+
+
+    function removeCarrier(index) {
+        carriers.splice(index, 1);
+        saveConfig();
+        renderCarriersList(); // Re-renderiza a lista ordenada
+    }
+
+    document.getElementById('fidelityRulesInput').addEventListener('change', e => e.target.files[0] && processarFidelityRules());
+
+    // --- Função processarFidelityRules (versão estável que lê o CSV específico) ---
+    function processarFidelityRules() {
+        const arquivo = document.getElementById('fidelityRulesInput').files[0];
+        if (!arquivo) {
+            showToast('Por favor, selecione um arquivo de regras de fidelidade.', 'error');
+            return;
+        }
+
+        Papa.parse(arquivo, {
+            header: false,
+            skipEmptyLines: true,
+            complete: function(results) {
+                fidelityRules = {}; // Limpa regras antigas
+                let ruleCount = 0;
+                let processedSuccessfully = false;
+
+                if (!results.data || results.data.length < 1) { // Só precisa do cabeçalho
+                    showToast('Erro: Arquivo CSV de regras vazio ou inválido.', 'error');
+                    document.getElementById('fidelityRulesInput').value = '';
+                    return;
+                }
+                 if (results.errors && results.errors.length > 0) {
+                     showToast(`Erro de parsing: ${results.errors[0].message}`, 'error');
+                     document.getElementById('fidelityRulesInput').value = '';
+                     return;
+                }
+
+                let headerRowIndex = -1;
+                let headers = [];
+
+                // Procura pelo cabeçalho (TIPO 1 ou TIPO 2)
+                for (let i = 0; i < results.data.length && i < 10; i++) {
+                    let row = results.data[i].map(h => h ? h.trim() : '');
+                    if (row[0] && row[0].startsWith('\ufeff')) row[0] = row[0].replace('\ufeff', '');
+                    row = row.map(h => h.toUpperCase());
+                    const hasTipo1 = row.includes('TRANSPORTADORA') && row.includes('BAIRROS ATENDIDOS');
+                    const hasTipo2 = row.includes('CIDADE') && (row.includes('AM') || row.includes('PM'));
+                    if (hasTipo1 || hasTipo2) {
+                        headerRowIndex = i;
+                        headers = row;
+                        break;
+                    }
+                }
+
+                if (headerRowIndex === -1) {
+                     // Tenta ler a primeira linha como cabeçalho mesmo se não encontrar as palavras chave
+                     console.warn('Cabeçalho padrão (TRANSPORTADORA/BAIRROS ATENDIDOS ou CIDADE) não encontrado, tentando ler a primeira linha.');
+                     let firstRow = results.data[0].map(h => h ? h.trim() : '');
+                     if (firstRow[0] && firstRow[0].startsWith('\ufeff')) firstRow[0] = firstRow[0].replace('\ufeff', '');
+                     headers = firstRow.map(h => h.toUpperCase());
+                     headerRowIndex = 0; // Assume que a primeira linha é o cabeçalho
+                     // Verifica se tem as colunas necessárias nesta primeira linha
+                     if (!(headers.includes('TRANSPORTADORA') && headers.includes('BAIRROS ATENDIDOS')) && !(headers.includes('CIDADE') && (headers.includes('AM') || headers.includes('PM')))) {
+                         showToast('Arquivo de regras inválido. Não encontrei colunas válidas na primeira linha.', 'error');
+                         document.getElementById('fidelityRulesInput').value = '';
+                         return;
+                     }
+
+                }
+
+                const dataRows = results.data.slice(headerRowIndex + 1);
+
+                const transportadoraIndex = headers.indexOf('TRANSPORTADORA');
+                const bairrosIndices = [];
+                headers.forEach((h, i) => {
+                    if (h === 'BAIRROS ATENDIDOS') {
+                        bairrosIndices.push(i);
+                    }
+                });
+                // Usa apenas o primeiro índice encontrado
+                const bairrosIndex = bairrosIndices.length > 0 ? bairrosIndices[0] : -1;
+                const cidadeIndex = headers.indexOf('CIDADE');
+
+                // Tenta processar TIPO 1 (TRANSPORTADORA)
+                if (transportadoraIndex !== -1 && bairrosIndex !== -1) {
+                    dataRows.forEach(row => {
+                         // Adiciona o nome original da transportadora à lista global
+                        let transportadoraOriginal = (row[transportadoraIndex] || '').trim();
+                        if (transportadoraOriginal && !carriers.some(c => c.toUpperCase() === transportadoraOriginal.toUpperCase())) {
+                             carriers.push(transportadoraOriginal);
+                             carriers.sort((a,b)=>a.localeCompare(b));
+                             renderCarriersList();
+                        }
+                        // Usa o nome normalizado para as regras
+                        let transportadora = transportadoraOriginal.toUpperCase();
+                        if (transportadora.includes('LOG SERVIÇOS')) transportadora = 'LOG SERVICOS';
+                        if (transportadora.includes('AC2 LOGISTICA')) transportadora = 'AC2 LOGISTICA';
+                        if (transportadora.includes('E-LOG')) transportadora = 'E-LOG';
+                        if (transportadora.includes('JULIANA APARECIDA DE MORAIS TRANSPORTES')) transportadora = 'JULIANA APARECIDA DE MORAIS TRANSPORTES';
+                        if (transportadora.includes('WLS CARGO')) transportadora = 'WLS CARGO';
+                        // Adiciona normalização para RodaCoop e DHL (como estava antes da reversão)
+                        if (transportadora.includes('RODACOOP')) transportadora = 'RODACOOP';
+                        if (transportadora.includes('DHL')) transportadora = 'DHL';
+
+
+                        let locationsString = (row[bairrosIndex] || '').trim(); // Usa apenas o primeiro índice
+
+                        if (!transportadora || !locationsString) return;
+
+                        let timeslot = 'AM';
+                        if (locationsString.toUpperCase().startsWith('PM:')) {
+                            timeslot = 'PM'; locationsString = locationsString.substring(3).trim();
+                        } else if (locationsString.toUpperCase().startsWith('AM:')) {
+                            timeslot = 'AM'; locationsString = locationsString.substring(3).trim();
+                        } else if (locationsString.toUpperCase().startsWith('AM99:')) {
+                            timeslot = 'AM99'; locationsString = locationsString.substring(5).trim();
+                        }
+
+                        const regionRegex = /(LITORAL (?:NORTE|SUL)\s?\(.*?\))/gi;
+                        locationsString = locationsString.replace(regionRegex, '').trim();
+                        const locations = locationsString.split(/[,;]/).map(loc => normalize(loc.trim()));
+
+                        locations.forEach(loc => {
+                            if (!loc) return;
+                            const key = loc;
+                            if (!fidelityRules[key]) {
+                                fidelityRules[key] = {};
+                                ruleCount++;
+                            }
+                            if (!fidelityRules[key][timeslot]) {
+                                fidelityRules[key][timeslot] = transportadora; // Salva nome normalizado
+                            } else {
+                                let existing = fidelityRules[key][timeslot].split('/');
+                                if (!existing.includes(transportadora)) {
+                                    fidelityRules[key][timeslot] += `/${transportadora}`;
+                                }
+                            }
+                        });
+                    });
+                    processedSuccessfully = true;
+                }
+                // Tenta processar TIPO 2 (CIDADE)
+                else if (cidadeIndex !== -1) {
+                    ruleCount = processarFidelityRulesCidadeBairro(headers, dataRows); // Passa apenas um objeto de regras
+                    if (ruleCount > 0) processedSuccessfully = true;
+                     // Adiciona transportadoras do formato CIDADE/BAIRRO também, se houver
+                     dataRows.forEach(row => {
+                         const amCarrier = headers.indexOf('AM') !==-1 ? (row[headers.indexOf('AM')] || '').trim() : '';
+                         const pmCarrier = headers.indexOf('PM') !==-1 ? (row[headers.indexOf('PM')] || '').trim() : '';
+                         const am99Carrier = headers.indexOf('AM99') !==-1 ? (row[headers.indexOf('AM99')] || '').trim() : '';
+                         [amCarrier, pmCarrier, am99Carrier].forEach(cName => {
+                             if (cName && !carriers.some(c => c.toUpperCase() === cName.toUpperCase())) {
+                                 carriers.push(cName);
+                                 carriers.sort((a,b)=>a.localeCompare(b));
+                                 renderCarriersList();
+                             }
+                         });
+                     });
+                }
+
+                if (processedSuccessfully && ruleCount > 0) {
+                    saveConfig(); // Salva carriers e regras
+                    updateFidelityStatusUI();
+                    showToast(`✓ ${ruleCount} regras carregadas com sucesso.`, 'success');
+                } else if (processedSuccessfully && ruleCount === 0) {
+                    showToast('Colunas de regras encontradas, mas nenhuma regra válida foi extraída.', 'info');
+                } else {
+                    let erroMsg = 'Formato inválido. Cabeçalho encontrado, mas faltam colunas: ';
+                    if (transportadoraIndex === -1) erroMsg += '"TRANSPORTADORA" ';
+                    if (bairrosIndex === -1) erroMsg += '"BAIRROS ATENDIDOS" ';
+                    if (cidadeIndex === -1) erroMsg += 'ou "CIDADE".';
+                    showToast(erroMsg, 'error');
+                }
+
+                document.getElementById('fidelityRulesInput').value = '';
+            },
+            error: (err) => {
+                 showToast(`Erro ao processar CSV: ${err.message}`, 'error');
+                 document.getElementById('fidelityRulesInput').value = '';
+             }
+        });
+    }
+
+
+    // Modificado para salvar em 'fidelityRules' (global)
+    function processarFidelityRulesCidadeBairro(headers, dataRows) {
+        const hMap = {
+            cidade: headers.indexOf('CIDADE'),
+            bairro: headers.indexOf('BAIRRO'),
+            am99: headers.indexOf('AM99'),
+            am: headers.indexOf('AM'),
+            pm: headers.indexOf('PM')
+        };
+
+        if (hMap.cidade === -1) return 0;
+
+        let rulesAddedCount = 0;
+        dataRows.forEach(row => {
+            const cidade = normalize((row[hMap.cidade] || '').trim());
+            const bairro = hMap.bairro !== -1 ? normalize((row[hMap.bairro] || '').trim()) : '';
+
+            if (cidade) {
+                const key = bairro ? `${cidade}|${bairro}` : cidade;
+                // Salva diretamente em fidelityRules
+                fidelityRules[key] = {
+                    AM99: hMap.am99 !== -1 ? (row[hMap.am99] || '').trim().toUpperCase() : '',
+                    AM: hMap.am !== -1 ? (row[hMap.am] || '').trim().toUpperCase() : '',
+                    PM: hMap.pm !== -1 ? (row[hMap.pm] || '').trim().toUpperCase() : ''
+                };
+                rulesAddedCount++;
+            }
+        });
+        return rulesAddedCount;
+    }
+
+
+    // Revertido para UI simples
+    function updateFidelityStatusUI() {
+        const statusEl = document.getElementById('fidelityStatus');
+        const count = Object.keys(fidelityRules).length; // Usa fidelityRules (singular)
+        if (count > 0) {
+            statusEl.innerHTML = `<p class="text-green-400 font-semibold text-sm">✓ ${count} locais configurados.</p>`;
+        } else {
+            statusEl.innerHTML = '<p class="text-gray-500 italic text-xs">Nenhuma regra de fidelidade carregada</p>';
+        }
+        // Lógica de radio button removida
+    }
+
+
+    // Revertido
+    function clearFidelityRules() {
+        fidelityRules = {}; // Limpa fidelityRules (singular)
+        saveConfig();
+        updateFidelityStatusUI();
+        document.getElementById('fidelityRulesInput').value = '';
+        showToast('Regras de fidelidade limpas.', 'info');
+    }
+
+
+    function saveConfigAndContinue() {
+        saveConfig(); // Salva fidelityRules (singular)
+        enableTab(3);
+        goToStep(3);
+    }
+
+    function pularConfiguracoes() {
+        enableTab(3);
+        goToStep(3);
+    }
+
+    // --- Step 3: Sync ---
+    document.getElementById('optimizationCsvInput').addEventListener('change', e => e.target.files[0] && processarOtimizacao());
+
+    function processarOtimizacao() {
+        if (dadosRotas.length === 0) {
+            showToast('Importe as rotas principais primeiro.', 'error');
+            return;
+        }
+        const arquivo = document.getElementById('optimizationCsvInput').files[0];
+        if (!arquivo) {
+            showToast('Por favor, selecione um arquivo de sincronização primeiro.', 'error');
+            return;
+        }
+        Papa.parse(arquivo, { header: true, skipEmptyLines: true, complete: parseOptimizationCSV });
+    }
+
+    function parseOptimizationCSV(results) {
+        if (results.errors.length) { showToast('Erros ao ler o CSV de otimização.', 'error'); return; }
+        if (!results.meta || !results.meta.fields) {
+            showToast('Não foi possível ler os cabeçalhos do CSV de Sincronização.', 'error');
+            return;
+        }
+
+        let headers = results.meta.fields.map(h => h ? h.trim() : '');
+        if (headers[0] && headers[0].startsWith('\ufeff')) {
+            headers[0] = headers[0].replace('\ufeff', '');
+        }
+        const normalizedHeaders = headers.map(h => h.toUpperCase());
+
+        const hMap = {
+            planned: findHeader(normalizedHeaders, ['plannedId', 'rota', 'ID Planejado']),
+            optimized: findHeader(normalizedHeaders, ['optimizedId', 'qr', 'ID Otimizado']),
+            vehicle: findHeader(normalizedHeaders, ['vehicle', 'veiculo', 'Tipo de Veículo']),
+            detail: findHeader(normalizedHeaders, ['detalhe do roteiro'])
+        };
+
+        if (hMap.planned === -1) {
+             showToast('Coluna de rota planejada ("ID Planejado") não encontrada.', 'error');
+             return;
+        }
+        const plannedHeader = headers[hMap.planned];
+        const optimizedHeader = hMap.optimized !== -1 ? headers[hMap.optimized] : null;
+        const vehicleHeader = hMap.vehicle !== -1 ? headers[hMap.vehicle] : null;
+        const detailHeader = hMap.detail !== -1 ? headers[hMap.detail] : null;
+
+
+        mapeamentoOtimizacao = {};
+        let count = 0;
+        results.data.forEach(row => {
+            const pId = (row[plannedHeader] || '').trim();
+            if (pId) {
+                let region = '';
+                if (detailHeader && row[detailHeader]) {
+                    region = (row[detailHeader] || '').split(' - ')[0].trim();
+                }
+                mapeamentoOtimizacao[pId] = {
+                    optimizedId: optimizedHeader ? (row[optimizedHeader] || '').trim() : '',
+                    vehicle: vehicleHeader ? (row[vehicleHeader] || '').trim() : '',
+                    region: region
+                };
+                count++;
+            }
+        });
+        applyOptimizationData();
+        document.getElementById('syncStatus').innerHTML = `<div class="p-3 bg-green-900/30 border border-green-600 rounded-lg"><p class="text-green-400 font-semibold">✓ Sincronização aplicada!</p><p class="text-sm text-gray-300 mt-1">${count} rotas sincronizadas.</p></div>`;
+    }
+
+
+    function applyOptimizationData() {
+        dadosRotas.forEach(r => {
+            const m = mapeamentoOtimizacao[r.originalRouteId];
+            if (m) {
+                if (m.optimizedId) r.routeId = m.optimizedId;
+                if (m.region) r.region = m.region;
+                if (m.vehicle) {
+                    r.vehicle = m.vehicle;
+                }
+            }
+        });
+    }
+
+    function pularSincronizacao() { enableTab(4); goToStep(4); }
+    function sincronizarEContinuar() { enableTab(4); goToStep(4); }
+
+    // --- Step 4 & Distribution Logic ---
+    function getTimeslot(routeId) {
+        if (!routeId) return null;
+        if (routeId.startsWith('AM99')) return 'AM99';
+        if (routeId.startsWith('AM')) return 'AM';
+        if (routeId.startsWith('PM')) return 'PM';
+        return null;
+    }
+
+    // Usa fidelityRules (singular)
+    function getPreferredCarrier(route, timeslot) {
+        const activeRules = fidelityRules; // Usa o objeto global
+        if (!timeslot || Object.keys(activeRules).length === 0) return null;
+
+        const city = normalize(route.city);
+        const neighborhood = normalize(route.neighborhood);
+
+        // Check neighborhood first
+        if (neighborhood && activeRules[neighborhood] && activeRules[neighborhood][timeslot]) {
+            return activeRules[neighborhood][timeslot]; // Retorna nome NORMALIZADO
+        }
+        // Fallback to city
+        if (city && activeRules[city] && activeRules[city][timeslot]) {
+             if (typeof activeRules[city] === 'object' && (activeRules[city].AM || activeRules[city].PM || activeRules[city].AM99)) {
+                 // É formato CIDADE/BAIRRO (ignora)
+             } else if (typeof activeRules[city][timeslot] === 'string'){
+                 // É formato antigo (usa)
+                 return activeRules[city][timeslot]; // Retorna nome NORMALIZADO
+             }
+        }
+
+        // Fallback for combined keys (CIDADE|BAIRRO)
+        if (city && neighborhood) {
+             const key = `${city}|${neighborhood}`;
+             const rule = activeRules[key];
+             if (rule && rule[timeslot]) {
+               return rule[timeslot]; // Retorna nome NORMALIZADO
+             }
+        }
+         // Fallback for just city key (CIDADE) - Formato CIDADE/BAIRRO
+         if (city) {
+              const rule = activeRules[city];
+              if (rule && typeof rule === 'object' && (rule.AM || rule.PM || rule.AM99)) {
+                    if(rule[timeslot]) return rule[timeslot]; // Retorna nome NORMALIZADO
+              }
+         }
+
+        return null;
+    }
+
+
+    function distributeRoutes() {
+         // Limpa o indicador visual
+         const indicator = document.getElementById('activeRuleIndicator');
+         if (indicator) indicator.textContent = '';
+
+
+        const grouped = groupRoutes(dadosRotas);
+        const allRouteKeys = Object.keys(grouped);
+        if (allRouteKeys.length === 0) {
+            document.getElementById('distributionResult').innerHTML = '<p class="text-red-400">Nenhuma rota para distribuir.</p>';
+            return;
+        }
+
+        const specialNeighborhoods = ['FEITOSA', 'JACINTINHO', 'CRUZ DAS ALMAS'];
+        const extraVehicleTypes = ['Utilitario Extra', 'Veiculo de Passeio Extra 6h', 'Veiculo de Passeio Extra 4h', 'Moto ME Extra'];
+        const routesForDist = [];
+        const routesForExtra = [];
+        // const routesLitoralNorte = []; // Lógica Litoral Norte REMOVIDA
+
+        // Encontra o nome exato de 'RodaCoop' na lista de carriers
+        const rodaCoopName = carriers.find(c => c.toUpperCase() === 'RODACOOP') || 'RodaCoop';
+
+        allRouteKeys.forEach(id => {
+            const route = grouped[id][0];
+            const vehicle = route.vehicle;
+            const neighborhood = normalize(route.neighborhood || '');
+            const region = normalize(route.region || '');
+
+            // --- REGRA LITORAL NORTE REMOVIDA ---
+            // if (region === 'LITORAL NORTE') {
+            //    routesLitoralNorte.push(id);
+            // } else {
+            // --- FIM DA REMOÇÃO ---
+
+                const isSpecialCase = vehicle === 'Veiculo de Passeio Extra 4h' && specialNeighborhoods.includes(neighborhood);
+                const isExtraVehicle = extraVehicleTypes.includes(vehicle);
+                if (isExtraVehicle && !isSpecialCase) {
+                    routesForExtra.push(id);
+                } else {
+                    routesForDist.push(id); // Todas as outras, incluindo Litoral Norte, vão para distribuição normal
+                }
+            // } // Fechamento do ELSE removido
+        });
+
+        // Lista de Litoral Norte REMOVIDA
+        // const distLitoralNorte = routesLitoralNorte.map(id => ({...}));
+
+        const distExtra = routesForExtra.map(id => ({ originalRouteId: id, assignedCarrier: 'Envios Extra', timeslot: getTimeslot(id), usedFidelity: false }));
+
+        // Filtra APENAS Envios Extra das transportadoras para balanceamento
+        const availableCarriersForBalancing = carriers.filter(c => c !== 'Envios Extra');
+        const carrierLoads = Object.fromEntries(availableCarriersForBalancing.map(c => [c, 0]));
+        const distOthers = [];
+
+        routesForDist.forEach(id => {
+            const firstPkg = grouped[id][0];
+            const timeslot = getTimeslot(id);
+            const prefCarrierString = getPreferredCarrier(firstPkg, timeslot); // <-- Usa fidelityRules
+
+            let assignedCarrier = null;
+            let usedFidelityRule = false;
+
+            if (prefCarrierString) {
+                // Mapeia o nome normalizado da regra para o nome ORIGINAL da lista carriers
+                 let validPreferredCarriers = prefCarrierString.split('/')
+                    .map(c => c.trim())
+                    .map(ruleCarrierNameUpper => {
+                         return carriers.find(globalCarrier => globalCarrier && globalCarrier.toUpperCase().includes(ruleCarrierNameUpper));
+                     })
+                     // Filtra se não achou OU se não está disponível para balanceamento
+                    .filter(foundCarrier => foundCarrier && availableCarriersForBalancing.includes(foundCarrier));
+
+                 validPreferredCarriers = [...new Set(validPreferredCarriers)];
+
+
+                if (validPreferredCarriers.length > 0) {
+                    assignedCarrier = validPreferredCarriers.reduce((minCarrier, currentCarrier) => {
+                         const minLoad = carrierLoads[minCarrier] || 0;
+                         const currentLoad = carrierLoads[currentCarrier] || 0;
+                         return currentLoad < minLoad ? currentCarrier : minCarrier;
+                    }, validPreferredCarriers[0]);
+                    usedFidelityRule = true;
+                }
+            }
+
+            if (!assignedCarrier) {
+                if (availableCarriersForBalancing.length > 0) {
+                    assignedCarrier = availableCarriersForBalancing.reduce((minCarrier, currentCarrier) => {
+                         const minLoad = carrierLoads[minCarrier] || 0;
+                         const currentLoad = carrierLoads[currentCarrier] || 0;
+                         return currentLoad < minLoad ? currentCarrier : minCarrier;
+                     }, availableCarriersForBalancing[0]);
+                } else {
+                    // Fallback se SÓ houver 'Envios Extra'
+                    assignedCarrier = carriers.includes('Envios Extra') ? 'Envios Extra' : 'N/A';
+                }
+            }
+
+            if (assignedCarrier !== 'N/A' && availableCarriersForBalancing.includes(assignedCarrier)) {
+                carrierLoads[assignedCarrier] = (carrierLoads[assignedCarrier] || 0) + 1;
+            }
+            distOthers.push({ originalRouteId: id, assignedCarrier: assignedCarrier, timeslot, usedFidelity: usedFidelityRule });
+        });
+
+        // Junta APENAS Extras e as outras
+        distributedRoutes = [...distExtra, ...distOthers].sort((a,b) => a.originalRouteId.localeCompare(b.originalRouteId));
+
+        renderDistribution();
+        generateWhatsAppReport();
+        enableTab(5);
+        if (hasCoordinates) enableTab(7);
+    }
+
+
+
+    function renderDistribution() {
+        const grouped = groupRoutes(dadosRotas);
+        document.getElementById('distributionResult').innerHTML = '<div class="space-y-2 pr-2">' + distributedRoutes.map((route, index) => {
+            const routeGroup = grouped[route.originalRouteId];
+            if (!routeGroup) return '';
+            const first = routeGroup[0];
+            return `<div class="grid grid-cols-12 items-center gap-3 p-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-sm">
+                        <div class="col-span-3">
+                            <span class="font-semibold text-yellow-400">${route.originalRouteId}</span>
+                            ${first.routeId !== route.originalRouteId ? `<span class="text-green-400 text-xs"> → ${first.routeId}</span>` : ''}
+                            <div class="text-xs text-gray-500 mt-1">${routeGroup.length} pacotes</div>
+                        </div>
+                        <div class="text-gray-400 text-xs truncate col-span-2">${first.region || 'N/A'}</div>
+                        <div class="text-cyan-400 text-xs truncate col-span-2">${first.vehicle || 'N/A'}</div>
+                        <div class="col-span-3">
+                            <select onchange="updateCarrier(${index}, this.value)" class="bg-gray-600 text-white rounded px-2 py-1 w-full text-xs">
+                                ${carriers.map(c => `<option value="${c}" ${c === route.assignedCarrier ? 'selected' : ''}>${c}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="text-right col-span-2">
+                            <span class="inline-block px-2 py-1 rounded-full text-xs font-semibold ${getCarrierColor(route.assignedCarrier)}">${route.assignedCarrier}</span>
+                        </div>
+                    </div>`;
+        }).join('') + '</div>';
+    }
+
+    function getCarrierColor(c) {
+        const normalizedCarrier = c ? c.toUpperCase().trim() : '';
+        const colors = {
+            'RODACOOP': 'bg-purple-600',
+            'AC2 LOGISTICA': 'bg-blue-600',
+            'ENVIOS EXTRA': 'bg-yellow-600',
+            'LOG SERVICOS': 'bg-green-600',
+            'E-LOG': 'bg-teal-600',
+            'WLS CARGO': 'bg-indigo-600',
+            'DHL': 'bg-red-600',
+            'JULIANA APARECIDA DE MORAIS TRANSPORTES': 'bg-pink-600',
+            'MORAIS': 'bg-pink-600',
+            'ECO': 'bg-emerald-600'
+        };
+        return colors[normalizedCarrier] || 'bg-gray-600';
+    }
+
+
+    function updateCarrier(index, newCarrier) {
+        distributedRoutes[index].assignedCarrier = newCarrier;
+        renderDistribution();
+        generateWhatsAppReport();
+        if (document.getElementById('summaryBreakdown').innerHTML !== '') generateSummaryBreakdown();
+    }
+
+    function redistribuir() { distributeRoutes(); }
+
+    async function redistributeWithAI() {
+        const btn = document.getElementById('aiRedistributeBtn');
+        if (!dadosRotas.length) {
+            showToast("Não há rotas para distribuir.", 'error');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Otimizando...`;
+
+        try {
+            // Usa fidelityRules (singular)
+            const activeRules = fidelityRules;
+            const grouped = groupRoutes(dadosRotas);
+            const routesToDistribute = Object.keys(grouped).map(routeId => {
+                const first = grouped[routeId][0];
+                return {
+                    originalRouteId: routeId,
+                    timeslot: getTimeslot(routeId) || 'N/A',
+                    city: first.city,
+                    neighborhood: first.neighborhood,
+                    packageCount: grouped[routeId].length,
+                    vehicle: first.vehicle,
+                    region: first.region // Mantém a região para info, mas sem regra especial
+                };
+            });
+
+            const systemPrompt = `Você é um despachante de logística de elite, especialista na otimização de rotas de entrega de última milha da operação do mercado livre em Maceió, Alagoas. Sua tarefa é receber uma lista de rotas, um conjunto de transportadoras disponíveis e as regras de negócio (fidelidade) e, em seguida, atribuir cada rota a uma transportadora da forma mais equilibrada e eficiente possível. Use os nomes completos das transportadoras conforme listado. Você deve seguir as regras estritamente e retornar sua decisão final exclusivamente no formato JSON solicitado.`;
+            const userQuery = `
+                Dada a seguinte lista de transportadoras disponíveis (use estes nomes EXATOS na resposta): ${JSON.stringify(carriers)}
+
+                E as seguintes regras de fidelidade: ${JSON.stringify(activeRules, null, 2)}
+
+                Por favor, redistribua as seguintes rotas de entrega: ${JSON.stringify(routesToDistribute, null, 2)}
+
+                Siga estas regras OBRIGATORIAMENTE, em ordem de prioridade:
+                1.  Regra de Veículos Especiais: Qualquer rota cujo veículo seja 'Utilitario Extra', 'Veiculo de Passeio Extra 6h', ou 'Moto ME Extra' DEVE ser atribuída à transportadora 'Envios Extra'. EXCEÇÃO: Se o veículo for 'Veiculo de Passeio Extra 4h' E o bairro for 'FEITOSA', 'JACINTINHO', ou 'CRUZ DAS ALMAS', ignore esta regra e aplique a Regra 2 (Fidelidade) ou a Regra 3 (Balanceamento).
+                2.  Regra de Fidelidade: Para rotas restantes (não Extra padrão), se houver uma transportadora designada nas 'regras de fidelidade' para seu 'timeslot' e 'local', você DEVE atribuí-la a essa transportadora (use o nome exato da lista fornecida). Se houver múltiplas (ex: 'A/B'), escolha a que tem menos rotas atribuídas até agora entre as opções válidas (excluindo 'Envios Extra' do balanceamento).
+                3.  Balanceamento de Carga: Para todas as outras rotas, distribua-as da forma mais EQUILIBRADA possível entre as transportadoras restantes (excluindo 'Envios Extra', a menos que sejam a única opção ou ditadas pela fidelidade). O objetivo principal é o NÚMERO DE ROTAS. Use os nomes exatos das transportadoras da lista inicial.
+                4.  Formato de Saída: Sua resposta DEVE ser um array JSON de objetos, onde cada objeto contém exatamente duas chaves: "originalRouteId" e "assignedCarrier". Não inclua nenhuma outra informação. Certifique-se de que os nomes em 'assignedCarrier' correspondem EXATAMENTE aos nomes na lista de transportadoras.`;
+
+            const apiKey = "AIzaSyB_z814W_J5MPIH3fCHKiFu5PJbcTE4578";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                "originalRouteId": { "type": "STRING" },
+                                "assignedCarrier": { "type": "STRING" }
+                            },
+                            required: ["originalRouteId", "assignedCarrier"]
+                        }
+                    }
+                }
+            };
+
+            let response;
+            let retries = 0;
+            const maxRetries = 4;
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (response.ok) break;
+                     if (response.status === 429 || response.status >= 500) {
+                        const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                        console.warn(`API Rate limit ou erro (${response.status}). Tentando novamente em ${delay/1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        retries++;
+                    } else {
+                        throw new Error(`API error ${response.status}: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    console.warn(`Erro de rede. Tentando novamente em ${delay/1000}s...`, error);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    retries++;
+                     if (retries >= maxRetries) throw error;
+                }
+            }
+             if (!response || !response.ok) throw new Error(`Falha ao chamar a API após ${maxRetries} tentativas.`);
+
+
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!text) throw new Error('A IA não retornou uma resposta válida.');
+
+            const newDistribution = JSON.parse(text);
+
+            if (!Array.isArray(newDistribution) || newDistribution.some(item => !item.originalRouteId || !item.assignedCarrier)) {
+                throw new Error("Formato de resposta da IA inválido.");
+            }
+
+            // Update distributedRoutes state from AI response
+            distributedRoutes.forEach(route => {
+                const aiAssignment = newDistribution.find(d => d.originalRouteId === route.originalRouteId);
+                if (aiAssignment) {
+                    const matchedCarrier = carriers.find(c => c.toUpperCase() === aiAssignment.assignedCarrier.toUpperCase());
+                    route.assignedCarrier = matchedCarrier || aiAssignment.assignedCarrier;
+                }
+            });
+
+            renderDistribution();
+            generateWhatsAppReport();
+            showToast("Rotas redistribuídas com sucesso pela IA!", 'success');
+
+        } catch (error) {
+            showToast('Erro ao redistribuir com IA: ' + error.message, 'error');
+             console.error("Erro AI:", error);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '✨ Redistribuir com IA';
+        }
+    }
+
+
+    function generateWhatsAppReport() {
+        const byCarrier = {};
+        const grouped = groupRoutes(dadosRotas);
+        distributedRoutes.forEach(r => {
+            if (!byCarrier[r.assignedCarrier]) byCarrier[r.assignedCarrier] = [];
+            const routeGroup = grouped[r.originalRouteId];
+            if(routeGroup) byCarrier[r.assignedCarrier].push({ ...r, ...routeGroup[0], packageCount: routeGroup.length });
+        });
+
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('pt-BR');
+        const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+        const timeslotCounts = distributedRoutes.reduce((acc, route) => {
+            const ts = getTimeslot(route.originalRouteId) || 'OUTRO';
+            acc[ts] = (acc[ts] || 0) + 1;
+            return acc;
+        }, {});
+
+        let reportTitle = 'DISTRIBUIÇÃO DE ROTAS';
+        const dominantTimeslot = Object.keys(timeslotCounts).reduce((a, b) => timeslotCounts[a] > timeslotCounts[b] ? a : b, null);
+        if (dominantTimeslot && dominantTimeslot !== 'OUTRO') {
+            reportTitle += ` ${dominantTimeslot}`;
+        } else {
+            reportTitle += ' AM/PM';
+        }
+        // Referência à regra ativa removida
+
+
+        let report = `═══════════════════════════════
+📦 ${reportTitle}
+═══════════════════════════════
+📅 Data: ${dateStr}
+🕐 Hora: ${timeStr}
+📍 Região: Maceió (AL)
+
+`;
+        const totalRoutes = distributedRoutes.length;
+        const totalPackages = dadosRotas.length;
+        const totalCarriers = Object.keys(byCarrier).length;
+
+        report += `📊 RESUMO GERAL\n`;
+        report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        report += `• Total de Rotas: ${totalRoutes}\n`;
+        report += `• Total de Pacotes: ${totalPackages}\n`;
+        report += `• Transportadoras: ${totalCarriers}\n\n`;
+
+
+        report += `🚚 DISTRIBUIÇÃO POR TRANSPORTADORA\n`;
+        report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+
+        Object.keys(byCarrier).sort().forEach(carrier => {
+            const routes = byCarrier[carrier];
+            report += `▸ ${carrier} (${routes.length} rotas)\n`;
+            routes.forEach(r => {
+                const groupedRoute = grouped[r.originalRouteId];
+                const first = groupedRoute ? groupedRoute[0] : {};
+                // const location = first.neighborhood || first.city || 'N/A'; // Lógica antiga
+                
+                // --- LÓGICA DE LOCALIZAÇÃO ATUALIZADA (BAIRRO/CIDADE) ---
+                let location = 'N/A';
+                const bairro = first.neighborhood || '';
+                const cidade = first.city || '';
+    
+                if (bairro && cidade) {
+                    // --- MUDANÇA ---
+                    // Mostra sempre BAIRRO/CIDADE se ambos existirem
+                    location = `${bairro}/${cidade}`;
+                    // --- FIM DA MUDANÇA ---
+                } else {
+                    // Senão, mostra o que existir
+                    location = bairro || cidade || 'N/A';
+                }
+                // --- FIM DA NOVA LÓGICA ---
+                
+                // --- ALTERAÇÃO AQUI ---
+                // Muda de 'pks' para 'pacote(s)'
+                report += `  • ${r.routeId !== r.originalRouteId ? `${r.originalRouteId}→${r.routeId}` : r.originalRouteId} (${r.packageCount} ${r.packageCount > 1 ? 'pacotes' : 'pacote'}) (${location})\n`;
+                // --- FIM DA ALTERAÇÃO ---
+            });
+            report += `\n`;
+        });
+        document.getElementById('whatsappReport').textContent = report;
+        window.currentReport = report;
+    }
+
+    function copiarRelatorio(event) {
+        if (!window.currentReport) {
+            showToast('Nenhum relatório para copiar.', 'info');
+            return;
+        }
+
+        const textArea = document.createElement("textarea");
+        textArea.value = window.currentReport;
+        textArea.style.position = "fixed";
+        textArea.style.top = "-9999px";
+        textArea.style.left = "-9999px";
+
+
+        document.body.appendChild(textArea);
+        textArea.select();
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✓ Copiado!';
+                btn.classList.add('bg-green-800');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('bg-green-800');
+                }, 2000);
+            } else {
+                 showToast('Não foi possível copiar o relatório (execCommand falhou).', 'error');
+            }
+        } catch (err) {
+            console.error('Erro ao copiar:', err);
+            showToast('Erro ao copiar o relatório: ' + err.message, 'error');
+        } finally {
+             document.body.removeChild(textArea);
+        }
+    }
+
+
+    function exportarTXT() {
+        const blob = new Blob([window.currentReport], { type: 'text/plain;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `relatorio_rotas_${new Date().toISOString().split('T')[0]}.txt`;
+        link.click();
+    }
+
+    function exportarResultado() {
+        const grouped = groupRoutes(dadosRotas);
+        const rows = [['Rota Original', 'Rota Final', 'Veículo', 'Transportadora', 'Pacotes']];
+        distributedRoutes.forEach(r => {
+            const first = grouped[r.originalRouteId]?.[0];
+            if(first) rows.push([r.originalRouteId, first.routeId, first.vehicle||'N/A', r.assignedCarrier, grouped[r.originalRouteId].length]);
+        });
+        const csv = rows.map(row => row.join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `distribuicao_rotas_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+    }
+
+    // --- MODIFICADO: saveCurrentDistribution agora chama a análise de IA ---
+    async function saveCurrentDistribution(event) { // Adiciona async
+        if (distributedRoutes.length === 0) {
+             showToast("Nada para salvar.", "info");
+             return;
+        }
+
+        // Feedback visual imediato
+        const btn = event.target; 
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = 'Aguarde...';
+
+        // --- LÓGICA DE COMPARAÇÃO DE HISTÓRICO ---
+        const history = JSON.parse(localStorage.getItem('routesHistory') || '[]');
+        if (history.length > 0) {
+            showToast("Comparando com histórico anterior para sugestões...", "info");
+            try {
+                const previousEntry = history[0]; // Pega a distribuição mais recente
+                
+                // 1. Prepara dados da distribuição ATUAL
+                const currentGrouped = groupRoutes(dadosRotas); // Usa dadosRotas global atual
+                const currentDistData = distributedRoutes
+                    .map(r => ({
+                        // Tenta pegar bairro, depois cidade, como 'local'
+                        local: (currentGrouped[r.originalRouteId] || [])[0]?.neighborhood || (currentGrouped[r.originalRouteId] || [])[0]?.city || 'N/A',
+                        transportadora: r.assignedCarrier
+                    }))
+                    .filter(r => r.transportadora !== 'Envios Extra' && r.local !== 'N/A' && r.local !== '');
+
+                // 2. Prepara dados da distribuição ANTERIOR
+                const previousDadosRotas = previousEntry.dadosRotas || []; // Garante que existe
+                const previousGrouped = groupRoutes(previousDadosRotas);
+                const previousDistData = (previousEntry.distributedRoutes || [])
+                    .map(r => ({
+                        local: (previousGrouped[r.originalRouteId] || [])[0]?.neighborhood || (previousGrouped[r.originalRouteId] || [])[0]?.city || 'N/A',
+                        transportadora: r.assignedCarrier
+                    }))
+                    .filter(r => r.transportadora !== 'Envios Extra' && r.local !== 'N/A' && r.local !== '');
+                
+                // 3. Agrega os dados para a IA (CONTAGEM por local/transportadora)
+                const aggregate = (data) => {
+                    const summary = {};
+                    data.forEach(item => {
+                        // Normaliza o local para agregação
+                        const key = `${normalize(item.local)}|${item.transportadora}`;
+                        summary[key] = (summary[key] || 0) + 1; // Conta rotas, não pacotes
+                    });
+                    return Object.keys(summary).map(key => {
+                        const [local, transportadora] = key.split('|');
+                        return { local, transportadora, contagem_rotas: summary[key] };
+                    });
+                };
+                
+                const currentAgg = aggregate(currentDistData);
+                const previousAgg = aggregate(previousDistData);
+
+                // 4. Chama a IA para análise
+                btn.innerHTML = 'Analisando...'; // Feedback de análise
+                const suggestions = await callHistoryAnalysisAPI(currentAgg, previousAgg);
+                
+                // 5. Mostra sugestões no modal
+                openHistoryModal("Sugestões de Rodízio para Amanhã", suggestions);
+
+            } catch (err) {
+                console.error("Erro ao processar análise de histórico:", err);
+                showToast("Erro ao gerar sugestões de rodízio.", "error");
+            }
+            
+        } else {
+            showToast("Primeira distribuição salva. O histórico será comparado na próxima vez.", "info");
+        }
+        // --- FIM DA LÓGICA DE COMPARAÇÃO ---
+
+        // Salva a distribuição ATUAL no histórico (tornando-a a "anterior" para a próxima vez)
+        saveToHistory();
+        
+        // Feedback visual do botão
+        btn.innerHTML = '✓ Salvo!';
+        setTimeout(() => { 
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 2000);
+    }
+
+
+    function reiniciarProcesso() {
+        if (distributedRoutes.length > 0) {
+            saveToHistory();
+        }
+        dadosRotas = []; mapeamentoOtimizacao = {}; distributedRoutes = [];
+        document.getElementById('csvInput').value = '';
+        document.getElementById('optimizationCsvInput').value = '';
+        document.getElementById('fidelityRulesInput').value = '';
+        resetTabs();
+        goToStep(0);
+    }
+
+    // --- Step 5: Summary & AI ---
+     async function getAIAnalysis() {
+        const btn = document.getElementById('aiAnalysisBtn');
+        const resultContainer = document.getElementById('aiAnalysisResult');
+        const sectionContainer = document.getElementById('aiAnalysisSection');
+
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analisando...`;
+        sectionContainer.classList.remove('hidden');
+        resultContainer.innerHTML = '<p class="text-gray-400 italic">Aguarde enquanto a IA analisa os dados da distribuição...</p>';
+
+        try {
+            // Usa fidelityRules (singular)
+            const activeRules = fidelityRules;
+            const summaryForAI = {};
+            const grouped = groupRoutes(dadosRotas);
+            distributedRoutes.forEach(route => {
+                const carrier = route.assignedCarrier;
+                if (!summaryForAI[carrier]) summaryForAI[carrier] = { routes: 0, packages: 0, neighborhoods: new Set() };
+                const routeGroup = grouped[route.originalRouteId];
+                summaryForAI[carrier].routes++;
+                summaryForAI[carrier].packages += routeGroup ? routeGroup.length : 0;
+                if (routeGroup) routeGroup.forEach(pkg => pkg.neighborhood && summaryForAI[carrier].neighborhoods.add(pkg.neighborhood));
+            });
+
+            const analysisData = Object.keys(summaryForAI).map(carrier => ({
+                transportadora: carrier, total_rotas: summaryForAI[carrier].routes, total_pacotes: summaryForAI[carrier].packages,
+                bairros_atendidos: Array.from(summaryForAI[carrier].neighborhoods).slice(0, 5)
+            }));
+
+            const systemPrompt = `Você é um analista de operações logísticas especialista em entregas de última milha (last-mile) na cidade de Maceió, Alagoas, Brasil. Seu objetivo é analisar dados diários de distribuição de rotas e fornecer insights concisos e acionáveis para o gerente de operações. Sua análise deve ser breve (1 parágrafo de resumo, 2-3 pontos de sugestão) e suas sugestões práticas e diretas ao ponto. Responda sempre em português do Brasil. Use Markdown para formatar a resposta.`;
+             // Prompt da IA SEM referência ao Litoral Norte ou Opções
+            const userQuery = `Analise a seguinte distribuição de rotas para hoje, ${new Date().toLocaleDateString('pt-BR')}. Forneça um **Resumo Executivo** de uma frase e 2 a 3 **Sugestões de Otimização** específicas, considerando equilíbrio de carga (nº rotas/transportadora restante), agrupamento geográfico e as regras de fidelidade usadas. Não faça sugestões sobre a 'Envios Extra', pois ela é uma transportadora especial que sempre terá mais rotas. Foque o balanceamento e as sugestões nas *outras* transportadoras. Dados da distribuição: \`\`\`json\n${JSON.stringify(analysisData, null, 2)}\n\`\`\` Regras de Fidelidade Usadas: \`\`\`json\n${JSON.stringify(activeRules, null, 2)}\n\`\`\``;
+
+
+            const apiKey = "AIzaSyB_z814W_J5MPIH3fCHKiFu5PJbcTE4578";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: userQuery }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+
+            let response;
+            let retries = 0;
+            const maxRetries = 4;
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (response.ok) break;
+                     if (response.status === 429 || response.status >= 500) {
+                        const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                        console.warn(`API Rate limit ou erro (${response.status}). Tentando novamente em ${delay/1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        retries++;
+                    } else {
+                        throw new Error(`API error ${response.status}: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    console.warn(`Erro de rede. Tentando novamente em ${delay/1000}s...`, error);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    retries++;
+                     if (retries >= maxRetries) throw error;
+                }
+            }
+             if (!response || !response.ok) throw new Error(`Falha ao chamar a API de Análise após ${maxRetries} tentativas.`);
+
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+                 let htmlResult = text
+                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                     .replace(/^- (.*?)$/gm, '<li class="ml-4">$1</li>')
+                     .replace(/<\/li>\n?<li/g,'</li><li')
+                     .replace(/(<li.*?>.*?<\/li>)/g, '<ul>$1</ul>')
+                     .replace(/<\/ul>\n?<ul>/g, '')
+                     .replace(/\n/g, '<br>');
+                 resultContainer.innerHTML = htmlResult;
+            } else { throw new Error('Resposta da IA inválida.'); }
+
+        } catch (error) {
+            resultContainer.innerHTML = `<p class="text-red-400"><strong>Erro ao gerar análise.</strong><br>${error.message}</p>`;
+             console.error("Erro AI Analysis:", error);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '✨ Gerar Análise com IA';
+        }
+    }
+
+    // --- Função: Gerar Mensagem WhatsApp por Transportadora (inalterada) ---
+    async function generateWhatsAppMessageForCarrier(carrierName, buttonElement) {
+         if (!carrierName) return;
+
+         const originalButtonText = buttonElement.innerHTML;
+         buttonElement.disabled = true;
+         buttonElement.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Gerando...`;
+
+         try {
+             const routesForCarrier = distributedRoutes.filter(r => r.assignedCarrier === carrierName);
+             if (routesForCarrier.length === 0) {
+                 showToast(`Nenhuma rota atribuída a ${carrierName}.`, 'info');
+                 buttonElement.disabled = false; // Restaura o botão
+                 buttonElement.innerHTML = originalButtonText;
+                 return;
+             }
+
+             const grouped = groupRoutes(dadosRotas);
+             let totalPackages = 0;
+             // Aumenta o limite de rotas enviadas para a IA ter o contexto completo
+             const routeDetails = routesForCarrier.map(r => {
+                 const routeGroup = grouped[r.originalRouteId] || [];
+                 const pkgCount = routeGroup.length;
+                 totalPackages += pkgCount;
+                 const firstPkg = routeGroup[0] || {};
+                 
+                 // --- NOVA LÓGICA DO MOTIVO ---
+                 let motivo = '';
+                 if (r.assignedCarrier === 'Envios Extra') {
+                     motivo = 'Regra Veículo Extra';
+                 } else if (r.usedFidelity) {
+                     motivo = 'Regra de Fidelidade';
+                 } else {
+                     motivo = 'Balanceamento de Carga';
+                 }
+                 // --- FIM DA NOVA LÓGICA ---
+
+                 return {
+                     id: r.routeId !== r.originalRouteId ? `${r.originalRouteId} (${r.routeId})` : r.originalRouteId,
+                     packages: pkgCount,
+                     neighborhood: firstPkg.neighborhood || firstPkg.city || 'N/A',
+                     motivo: motivo // Adiciona o motivo
+                 };
+             }); // Remove o slice(0, 15) para enviar todos os dados
+
+              const systemPrompt = `Você é um assistente de despacho logístico. Sua tarefa é gerar uma mensagem curta, clara e amigável para o WhatsApp, destinada a uma transportadora específica, resumindo as rotas atribuídas para o dia. A mensagem deve ser em português do Brasil e EXPLICAR o motivo da atribuição de cada grupo de rotas.`;
+             // --- PROMPT DA IA ATUALIZADO ---
+             const userQuery = `
+Gere uma mensagem de WhatsApp para a transportadora "${carrierName}".
+Hoje foram atribuídas ${routesForCarrier.length} rotas, totalizando aproximadamente ${totalPackages} pacotes.
+
+Abaixo está a lista completa das rotas e o motivo de cada atribuição:
+${JSON.stringify(routeDetails, null, 2)}
+
+Por favor, agrupe as rotas pelo "motivo" e liste os IDs de cada grupo.
+Seja conciso e amigável. Comece com "Olá, ${carrierName}! Seguem as vossas rotas de hoje:".
+Liste primeiro as rotas por "Regra de Fidelidade", depois "Regra Veículo Extra" (se houver), e por último "Balanceamento de Carga".
+
+Exemplo de formato:
+Olá, ${carrierName}! Seguem as vossas rotas de hoje:
+- Por Regra de Fidelidade (${/*contagem*/ 'X'} rotas): [lista de IDs]
+- Por Balanceamento de Carga (${/*contagem*/ 'Y'} rotas): [lista de IDs]
+
+Total: ${routesForCarrier.length} rotas (${totalPackages} pacotes). Bom trabalho!
+`;
+            // --- FIM DO PROMPT ATUALIZADO ---
+
+             const apiKey = "AIzaSyB_z814W_J5MPIH3fCHKiFu5PJbcTE4578";
+             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+             const payload = { contents: [{ parts: [{ text: userQuery }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+
+            let response;
+            let retries = 0;
+            const maxRetries = 4;
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (response.ok) break;
+                     if (response.status === 429 || response.status >= 500) {
+                        const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                        console.warn(`API Rate limit ou erro (${response.status}). Tentando novamente em ${delay/1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        retries++;
+                    } else {
+                        throw new Error(`API error ${response.status}: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    console.warn(`Erro de rede. Tentando novamente em ${delay/1000}s...`, error);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    retries++;
+                     if (retries >= maxRetries) throw error;
+                }
+            }
+             if (!response || !response.ok) throw new Error(`Falha ao chamar a API de Mensagem após ${maxRetries} tentativas.`);
+
+
+             const result = await response.json();
+             const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+             if (text) {
+                 openWhatsAppModal(carrierName, text);
+             } else {
+                 throw new Error('A IA não retornou uma mensagem válida.');
+             }
+
+         } catch (error) {
+             showToast(`Erro ao gerar mensagem para ${carrierName}: ${error.message}`, 'error');
+             console.error("Erro Geração Mensagem:", error);
+         } finally {
+             buttonElement.disabled = false;
+             buttonElement.innerHTML = originalButtonText;
+         }
+    }
+
+
+    // --- Funções do Modal de Mensagem WhatsApp (inalteradas) ---
+    function openWhatsAppModal(carrierName, messageText) {
+        document.getElementById('whatsapp-modal-title').textContent = `Mensagem WhatsApp para ${carrierName}`;
+        document.getElementById('whatsapp-modal-text').textContent = messageText;
+        document.getElementById('whatsapp-modal').classList.add('active');
+    }
+
+    function closeWhatsAppModal() {
+        document.getElementById('whatsapp-modal').classList.remove('active');
+    }
+
+     function copyWhatsAppMessage(buttonElement) {
+        const textToCopy = document.getElementById('whatsapp-modal-text').textContent;
+        if (!textToCopy) {
+            showToast('Nenhuma mensagem para copiar.', 'info');
+            return;
+        }
+
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        textArea.style.position = "fixed";
+        textArea.style.top = "-9999px";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                const originalText = buttonElement.innerHTML;
+                buttonElement.innerHTML = '✓ Copiado!';
+                buttonElement.classList.add('bg-green-800');
+                setTimeout(() => {
+                    buttonElement.innerHTML = originalText;
+                    buttonElement.classList.remove('bg-green-800');
+                    closeWhatsAppModal();
+                }, 1500);
+            } else {
+                 showToast('Não foi possível copiar a mensagem.', 'error');
+            }
+        } catch (err) {
+            showToast('Erro ao copiar a mensagem: ' + err.message, 'error');
+            console.error("Erro Cópia WhatsApp:", err);
+        } finally {
+            document.body.removeChild(textArea);
+        }
+    }
+
+    // --- NOVAS Funções do Modal de Análise de Histórico ---
+    function openHistoryModal(title, text) {
+        document.getElementById('ai-history-modal-title').textContent = title;
+        // Converte Markdown simples para HTML para o modal
+        let htmlResult = text
+             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Negrito
+             .replace(/^- (.*?)$/gm, '<li class="ml-4">$1</li>') // Itens de lista
+             .replace(/<\/li>\n?<li/g,'</li><li') // Corrige espaço extra entre LIs
+             .replace(/(<li.*?>.*?<\/li>)/g, '<ul>$1</ul>') // Agrupa LIs em UL
+             .replace(/<\/ul>\n?<ul>/g, '') // Junta ULs adjacentes
+             .replace(/\n/g, '<br>'); // Novas linhas
+        document.getElementById('ai-history-modal-text').innerHTML = htmlResult;
+        document.getElementById('ai-history-modal').classList.add('active');
+    }
+
+    function closeHistoryModal() {
+        document.getElementById('ai-history-modal').classList.remove('active');
+    }
+    // --- FIM DAS NOVAS FUNÇÕES ---
+
+
+    // Revertido para não mencionar opção de regra
+    function generateSummaryBreakdown() {
+        const container = document.getElementById('summaryBreakdown');
+        if (distributedRoutes.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 italic">Nenhuma distribuição para exibir.</p>';
+            return;
+        }
+
+        document.getElementById('aiAnalysisSection').classList.add('hidden');
+
+        const summary = {};
+        const grouped = groupRoutes(dadosRotas);
+
+        distributedRoutes.forEach(route => {
+            const carrier = route.assignedCarrier;
+            const timeslot = route.timeslot || 'Sem Timeslot';
+            if (!summary[carrier]) {
+                summary[carrier] = { AM99:{r:0,p:0,f:0}, AM:{r:0,p:0,f:0}, PM:{r:0,p:0,f:0}, 'Sem Timeslot':{r:0,p:0,f:0}, total:{r:0,p:0,f:0} };
+            }
+            const pkgCount = grouped[route.originalRouteId]?.length || 0;
+            summary[carrier][timeslot].r++;
+            summary[carrier][timeslot].p += pkgCount;
+            if (route.usedFidelity) summary[carrier][timeslot].f++;
+            summary[carrier].total.r++;
+            summary[carrier].total.p += pkgCount;
+            if (route.usedFidelity) summary[carrier].total.f++;
+        });
+
+        let html = '';
+        Object.keys(summary).sort().forEach(carrier => {
+            const data = summary[carrier];
+            html += `
+            <div class="bg-gray-700/50 rounded-lg p-6">
+                <div class="flex justify-between items-center mb-4 gap-2 flex-wrap">
+                    <h4 class="text-xl font-bold ${getCarrierTextColor(carrier)}">${carrier}</h4>
+                    <button onclick="generateWhatsAppMessageForCarrier('${carrier.replace(/'/g, "\\'")}', this)" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5">
+                      ✨ Gerar Mensagem WhatsApp
+                    </button>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold text-white">${data.total.r}</div>
+                        <div class="text-xs text-gray-400">rotas</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                    ${['AM99', 'AM', 'PM', 'Sem Timeslot'].map(ts => `
+                        <div class="bg-gray-800 rounded p-3 text-center">
+                            <div class="text-xs text-gray-400 mb-1">${ts}</div>
+                            <div class="text-lg font-bold text-blue-400">${data[ts].r}</div>
+                            <div class="text-xs text-gray-500">${data[ts].p} pacotes</div>
+                            ${data[ts].f > 0 ? `<div class="text-xs text-purple-400 mt-1">✓ ${data[ts].f} fidelidade</div>` : ''}
+                        </div>`).join('')}
+                </div>
+                <div class="bg-gray-800 rounded p-3 flex justify-between items-center">
+                    <span class="text-sm text-gray-400">Total Pacotes:</span>
+                    <span class="text-lg font-bold text-green-400">${data.total.p}</span>
+                </div>
+                ${data.total.f > 0 ? `<div class="bg-purple-900/30 border border-purple-600 rounded p-2 mt-2 text-center">
+                    <span class="text-xs text-purple-300">✓ ${data.total.f} rotas com regra de fidelidade</span></div>` : ''}
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+
+    function getCarrierTextColor(c) {
+        const normalizedCarrier = c ? c.toUpperCase().trim() : '';
+         const colors = {
+            'RODACOOP': 'text-purple-400',
+            'AC2 LOGISTICA': 'text-blue-400',
+            'ENVIOS EXTRA': 'text-yellow-400',
+            'LOG SERVICOS': 'text-green-400',
+            'E-LOG': 'text-teal-400',
+            'WLS CARGO': 'text-indigo-400',
+            'DHL': 'text-red-400',
+            'JULIANA APARECIDA DE MORAIS TRANSPORTES': 'text-pink-400',
+            'MORAIS': 'text-pink-400',
+            'ECO': 'text-emerald-400'
+        };
+        return colors[normalizedCarrier] || 'text-gray-400';
+    }
+
+
+    function exportarResumoCSV() {
+        if (distributedRoutes.length === 0) { showToast('Nenhuma distribuição para exportar.', 'info'); return; }
+        const csvRows = [['Transportadora', 'Timeslot', 'Rotas', 'Pacotes', 'Com Fidelidade']];
+        const summary = {};
+        const grouped = groupRoutes(dadosRotas);
+        distributedRoutes.forEach(route => {
+            const key = `${route.assignedCarrier}|${route.timeslot || 'Sem Timeslot'}`;
+            if (!summary[key]) summary[key] = { c: route.assignedCarrier, t: route.timeslot || 'Sem Timeslot', r: 0, p: 0, f: 0 };
+            summary[key].r++;
+            summary[key].p += grouped[route.originalRouteId]?.length || 0;
+            if (route.usedFidelity) summary[key].f++;
+        });
+        Object.values(summary).forEach(d => { csvRows.push([d.c, d.t, d.r, d.p, d.f]); });
+        const csvContent = csvRows.map(row => row.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `resumo_detalhado_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+    }
+
+    // --- NOVA Função: Chamar API Gemini para Análise de Histórico ---
+    async function callHistoryAnalysisAPI(currentAgg, previousAgg) {
+         const systemPrompt = `Você é um gerente de logística especialista em otimização de rotas em Maceió. Sua tarefa é comparar a distribuição de hoje com a de ontem e sugerir mudanças para AMANHÃ para garantir um rodízio justo das transportadoras, evitando que uma transportadora fique com a mesm_a região por muitos dias seguidos. Foque em sugerir MUDANÇAS.`;
+         const userQuery = `
+Compare a distribuição de ontem com a de hoje e sugira quais bairros/regiões (locais) deveriam trocar de transportadora AMANHÃ para garantir um bom rodízio.
+
+REGRAS IMPORTANTES:
+1. Foque apenas nas transportadoras que NÃO sejam 'Envios Extra'. Os dados já estão filtrados.
+2. Identifique bairros/locais que foram atribuídos à MESMA transportadora tanto ontem quanto hoje. Estes são os principais candidatos para rodízio.
+3. Dê 2-3 sugestões claras e acionáveis (Ex: "Rotacionar Bairro X da Transportadora A para B").
+
+Distribuição de Ontem (JSON - {local, transportadora, contagem_rotas}):
+${JSON.stringify(previousAgg)}
+
+Distribuição de Hoje (JSON - {local, transportadora, contagem_rotas}):
+${JSON.stringify(currentAgg)}
+
+Sugestões de Rodízio para Amanhã (responda em português do Brasil, formato Markdown):
+`;
+
+        try {
+            const apiKey = "AIzaSyB_z814W_J5MPIH3fCHKiFu5PJbcTE4578";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: userQuery }] }], systemInstruction: { parts: [{ text: systemPrompt }] } };
+
+            let response;
+            let retries = 0;
+            const maxRetries = 4;
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (response.ok) break;
+                     if (response.status === 429 || response.status >= 500) {
+                        const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                        console.warn(`API Rate limit ou erro (${response.status}). Tentando novamente em ${delay/1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        retries++;
+                    } else {
+                        throw new Error(`API error ${response.status}: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    console.warn(`Erro de rede. Tentando novamente em ${delay/1000}s...`, error);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    retries++;
+                     if (retries >= maxRetries) throw error;
+                }
+            }
+             if (!response || !response.ok) throw new Error(`Falha ao chamar a API de Análise de Histórico após ${maxRetries} tentativas.`);
+
+
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+                return text;
+            } else {
+                throw new Error('A IA não retornou uma resposta válida para a análise de histórico.');
+            }
+
+        } catch (error) {
+            console.error("Erro na Análise de Histórico da IA:", error);
+            return `Ocorreu um erro ao analisar o histórico: ${error.message}`;
+        }
+    }
+
+    // ==========================================
+    // STEP 6: HISTÓRICO
+    // ==========================================
+    // --- MODIFICADO: saveCurrentDistribution agora chama a análise de IA ---
+    async function saveCurrentDistribution(event) { // Adiciona async
+        if (distributedRoutes.length === 0) {
+             showToast("Nada para salvar.", "info");
+             return;
+        }
+
+        // Feedback visual imediato
+        const btn = event.target; 
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = 'Aguarde...';
+
+        // --- LÓGICA DE COMPARAÇÃO DE HISTÓRICO ---
+        const history = JSON.parse(localStorage.getItem('routesHistory') || '[]');
+        if (history.length > 0) {
+            showToast("Comparando com histórico anterior para sugestões...", "info");
+            try {
+                const previousEntry = history[0]; // Pega a distribuição mais recente
+                
+                // 1. Prepara dados da distribuição ATUAL
+                const currentGrouped = groupRoutes(dadosRotas); // Usa dadosRotas global atual
+                const currentDistData = distributedRoutes
+                    .map(r => ({
+                        // Tenta pegar bairro, depois cidade, como 'local'
+                        local: (currentGrouped[r.originalRouteId] || [])[0]?.neighborhood || (currentGrouped[r.originalRouteId] || [])[0]?.city || 'N/A',
+                        transportadora: r.assignedCarrier
+                    }))
+                    .filter(r => r.transportadora !== 'Envios Extra' && r.local !== 'N/A' && r.local !== '');
+
+                // 2. Prepara dados da distribuição ANTERIOR
+                // CORREÇÃO: Usa previousEntry.slimDadosRotas e previousEntry.slimDistributedRoutes
+                const previousSlimDadosRotas = previousEntry.slimDadosRotas || []; // Garante que existe
+                const previousGrouped = groupRoutes(previousSlimDadosRotas); // Agrupa os dados magros
+                const previousDistData = (previousEntry.slimDistributedRoutes || [])
+                    .map(r => ({
+                        // Usa os dados magros agrupados para encontrar o local
+                        local: (previousGrouped[r.originalRouteId] || [])[0]?.neighborhood || (previousGrouped[r.originalRouteId] || [])[0]?.city || 'N/A',
+                        transportadora: r.assignedCarrier
+                    }))
+                    .filter(r => r.transportadora !== 'Envios Extra' && r.local !== 'N/A' && r.local !== '');
+                
+                // 3. Agrega os dados para a IA (CONTAGEM por local/transportadora)
+                const aggregate = (data) => {
+                    const summary = {};
+                    data.forEach(item => {
+                        // Normaliza o local para agregação
+                        const key = `${normalize(item.local)}|${item.transportadora}`;
+                        summary[key] = (summary[key] || 0) + 1; // Conta rotas, não pacotes
+                    });
+                    return Object.keys(summary).map(key => {
+                        const [local, transportadora] = key.split('|');
+                        return { local, transportadora, contagem_rotas: summary[key] };
+                    });
+                };
+                
+                const currentAgg = aggregate(currentDistData);
+                const previousAgg = aggregate(previousDistData);
+
+                // 4. Chama a IA para análise
+                btn.innerHTML = 'Analisando...'; // Feedback de análise
+                const suggestions = await callHistoryAnalysisAPI(currentAgg, previousAgg);
+                
+                // 5. Mostra sugestões no modal
+                openHistoryModal("Sugestões de Rodízio para Amanhã", suggestions);
+
+            } catch (err) {
+                console.error("Erro ao processar análise de histórico:", err);
+                showToast("Erro ao gerar sugestões de rodízio.", "error");
+            }
+            
+        } else {
+            showToast("Primeira distribuição salva. O histórico será comparado na próxima vez.", "info");
+        }
+        // --- FIM DA LÓGICA DE COMPARAÇÃO ---
+
+        // Salva a distribuição ATUAL no histórico (tornando-a a "anterior" para a próxima vez)
+        saveToHistory(); // Esta é a função original
+        
+        // Feedback visual do botão
+        btn.innerHTML = '✓ Salvo!';
+        setTimeout(() => { 
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 2000);
+    }
+
+
+    function saveToHistory() {
+        if (distributedRoutes.length === 0) return;
+        const history = JSON.parse(localStorage.getItem('routesHistory') || '[]');
+
+        // --- CORREÇÃO QUOTA ---
+        // Cria uma versão "magra" dos dados das rotas, guardando apenas o essencial
+        const slimDadosRotas = dadosRotas.map(r => ({
+            originalRouteId: r.originalRouteId,
+            routeId: r.routeId,
+            neighborhood: r.neighborhood,
+            city: r.city,
+            region: r.region,
+            vehicle: r.vehicle,
+            lat: r.lat,
+            lng: r.lng
+        }));
+        // Guarda apenas os dados de distribuição essenciais
+        const slimDistributedRoutes = distributedRoutes.map(r => ({
+             originalRouteId: r.originalRouteId,
+             assignedCarrier: r.assignedCarrier,
+             usedFidelity: r.usedFidelity // Necessário para a análise do IA de resumo
+        }));
+        // --- FIM DA CORREÇÃO ---
+
+        const entry = {
+            id: Date.now(), timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString('pt-BR'), time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            
+            // Usa as versões "magras"
+            slimDadosRotas: slimDadosRotas, 
+            mapeamentoOtimizacao, // Mapeamento é pequeno, pode manter
+            slimDistributedRoutes: slimDistributedRoutes, 
+            
+            fidelityRules, // Salva fidelityRules (singular)
+            carriers,
+            totalRoutes: distributedRoutes.length, 
+            totalPackages: dadosRotas.length, // O n.º de pacotes ainda é o total de linhas em dadosRotas
+            totalCarriers: [...new Set(distributedRoutes.map(r => r.assignedCarrier))].length
+        };
+        history.unshift(entry);
+        
+        // Reduz o limite do histórico para ter a certeza que não excede
+        if (history.length > 20) history.splice(20); // Reduzido de 50 para 20
+
+        try {
+            localStorage.setItem('routesHistory', JSON.stringify(history));
+        } catch (e) {
+            if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+                showToast('Erro: Quota do histórico excedida. A limpar histórico antigo...', 'error');
+                // Se falhar, tenta remover o item mais antigo e salvar de novo
+                try {
+                     history.pop(); // Remove o mais antigo
+                     localStorage.setItem('routesHistory', JSON.stringify(history));
+                } catch (e2) {
+                     showToast('Erro grave: Não foi possível salvar no histórico, mesmo após limpeza.', 'error');
+                     console.error("Erro ao salvar histórico:", e2);
+                }
+            } else {
+                 console.error("Erro ao salvar histórico:", e);
+                 showToast(`Erro ao salvar histórico: ${e.message}`, 'error');
+            }
+        }
+        
+        if (accessToken) uploadHistoryToDrive();
+    }
+
+
+    function loadHistoryList() {
+        const history = JSON.parse(localStorage.getItem('routesHistory') || '[]');
+        const container = document.getElementById('historyList');
+        if (history.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 italic">Nenhuma distribuição salva ainda.</p>'; return;
+        }
+        container.innerHTML = history.map(entry => `
+            <div class="bg-gray-700/50 rounded-lg p-4 hover:bg-gray-700 transition-all cursor-pointer" ondblclick="restoreFromHistory(${entry.id})" title="Duplo clique para restaurar">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="font-semibold text-blue-300">${entry.date} às ${entry.time}</h4>
+                        <p class="text-sm text-gray-400 mt-1">${entry.totalRoutes} rotas | ${entry.totalPackages} pacotes | ${entry.totalCarriers || 0} transportadoras</p>
+                        <!-- Remove referência à regra usada -->
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="restoreFromHistory(${entry.id}); event.stopPropagation();" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">↻ Restaurar</button>
+                        <button onclick="deleteFromHistory(${entry.id}); event.stopPropagation();" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm">🗑️</button>
+                    </div>
+                </div>
+            </div>`).join('');
+    }
+
+
+    function restoreFromHistory(id) {
+        const entry = JSON.parse(localStorage.getItem('routesHistory') || '[]').find(e => e.id === id);
+        if (!entry) { showToast('Distribuição não encontrada.', 'error'); return; }
+
+        // CORREÇÃO: Restaura os dados magros
+        dadosRotas = entry.slimDadosRotas || entry.dadosRotas; // Usa 'slim' se existir, senão o antigo 'dadosRotas'
+        mapeamentoOtimizacao = entry.mapeamentoOtimizacao;
+        distributedRoutes = entry.slimDistributedRoutes || entry.distributedRoutes; // Usa 'slim' se existir
+        
+        fidelityRules = entry.fidelityRules || {};
+        carriers = entry.carriers || ['RodaCoop', 'AC2 LOGISTICA', 'Envios Extra', 'LOG SERVICOS', 'E-LOG', 'WLS CARGO', 'DHL', 'JULIANA APARECIDA DE MORAIS TRANSPORTES', 'ECO'];
+        hasCoordinates = dadosRotas.some(r => r.lat && r.lng);
+
+        resetTabs();
+        for (let i = 1; i <= 7; i++) {
+            if (i !== 3) enableTab(i); // Habilita todas exceto Sincronizar (dados já estão mapeados)
+        }
+        document.getElementById('mapViewTabBtn').disabled = !hasCoordinates;
+
+        // Vai para a etapa de resultados
+        goToStep(4);
+        
+        // ATENÇÃO: distributeRoutes() não é chamado aqui, pois os dados estão magros
+        // Apenas renderizamos os dados salvos
+        renderDistribution();
+        generateWhatsAppReport();
+        
+        showToast("Distribuição do histórico restaurada. Para reprocessar, inicie um novo processo.", "info");
+        // Desabilita Sincronizar, pois os dados magros não podem ser re-sincronizados
+        document.querySelector(`.tab-btn[data-step="3"]`).disabled = true;
+    }
+
+
+    function deleteFromHistory(id) {
+        let history = JSON.parse(localStorage.getItem('routesHistory') || '[]');
+        history = history.filter(e => e.id !== id);
+        localStorage.setItem('routesHistory', JSON.stringify(history));
+        loadHistoryList();
+    }
+
+    function limparHistorico() {
+        localStorage.removeItem('routesHistory');
+        loadHistoryList();
+    }
+
+    function exportarHistorico() {
+        const history = localStorage.getItem('routesHistory') || '[]';
+        if (history === '[]') { showToast('Nenhum histórico para exportar.', 'info'); return; }
+        const blob = new Blob([JSON.stringify(JSON.parse(history), null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `backup_historico_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+    }
+
+    function importarHistorico() { document.getElementById('importHistoryInput').click(); }
+
+    function handleImportHistory(event) {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (!Array.isArray(imported)) throw new Error('Arquivo inválido.');
+                const current = JSON.parse(localStorage.getItem('routesHistory') || '[]');
+                const merged = [...imported, ...current];
+                const unique = merged.filter((entry, i, self) => self.findIndex(e => e.id === entry.id) === i)
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 20); // Limita a 20
+                localStorage.setItem('routesHistory', JSON.stringify(unique));
+                loadHistoryList();
+                showToast(`${imported.length} distribuições importadas.`, 'success');
+            } catch (error) { showToast('Erro ao importar backup: ' + error.message, 'error'); }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+
+    // ==========================================
+    // STEP 7: MAP VIEW (inalterado)
+    // ==========================================
+    function getMapCarrierColor(carrier) {
+        const normalizedCarrier = carrier ? carrier.toUpperCase().trim() : '';
+         const colors = {
+            'RODACOOP': '#9333ea',
+            'AC2 LOGISTICA': '#2563eb',
+            'ENVIOS EXTRA': '#ca8a04',
+            'LOG SERVICOS': '#166534',
+            'E-LOG': '#0d9488',
+            'WLS CARGO': '#4f46e5',
+            'DHL': '#dc2626',
+            'JULIANA APARECIDA DE MORAIS TRANSPORTES': '#db2777',
+            'MORAIS': '#db2777',
+            'ECO': '#10b981'
+        };
+        return colors[normalizedCarrier] || '#4b5563';
+    }
+
+
+    function initializeMap() {
+        if (!hasCoordinates) {
+            document.getElementById('map').innerHTML = `<div class="flex items-center justify-center h-full"><p class="text-gray-500">Dados de geolocalização não encontrados.</p></div>`;
+            return;
+        }
+        if (map && map.invalidateSize) {
+            map.invalidateSize();
+            drawMapMarkers();
+            return;
+        }
+
+        map = L.map('map').setView([-9.665, -35.735], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        markerLayer = L.layerGroup().addTo(map);
+        renderMapControls();
+        drawMapMarkers();
+    }
+
+    function renderMapControls() {
+        const activeCarriers = [...new Set(distributedRoutes.map(r => r.assignedCarrier))].sort();
+        let html = `<div class="mb-4">
+                        <button onclick="toggleAllCarriers(true)" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded">Todos</button>
+                        <button onclick="toggleAllCarriers(false)" class="text-xs bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded ml-2">Nenhum</button>
+                    </div>`;
+        html += activeCarriers.map(c => {
+             const checkboxId = `carrier-filter-${c.replace(/[^a-zA-Z0-9]/g, '-')}`;
+            return `
+            <div class="flex items-center bg-gray-700/50 p-2 rounded-md">
+                <input type="checkbox" id="${checkboxId}" data-carrier-name="${c}" class="carrier-filter-cb h-4 w-4 rounded accent-blue-500" onchange="drawMapMarkers()" checked>
+                <label for="${checkboxId}" class="ml-3 flex items-center text-sm w-full">
+                    <span class="w-3 h-3 rounded-full mr-2" style="background-color: ${getMapCarrierColor(c)};"></span>
+                    <span class="font-semibold">${c}</span>
+                </label>
+            </div>`;
+        }).join('');
+        document.getElementById('map-controls').innerHTML = html;
+    }
+
+
+    function toggleAllCarriers(check) {
+        document.querySelectorAll('.carrier-filter-cb').forEach(cb => cb.checked = check);
+        drawMapMarkers();
+    }
+
+    function drawMapMarkers() {
+        if (!map || !markerLayer) return;
+        markerLayer.clearLayers();
+        const visible = new Set(Array.from(document.querySelectorAll('.carrier-filter-cb:checked')).map(cb => cb.dataset.carrierName));
+        const routeCarrierMap = new Map(distributedRoutes.map(r => [r.originalRouteId, r.assignedCarrier]));
+
+        dadosRotas.forEach(p => {
+            if (p.lat && p.lng && !isNaN(p.lat) && !isNaN(p.lng)) {
+                const carrier = routeCarrierMap.get(p.originalRouteId);
+                if (carrier && visible.has(carrier)) {
+                    L.circleMarker([p.lat, p.lng], {
+                        radius: 6, fillColor: getMapCarrierColor(carrier), color: "#fff", weight: 1, opacity: 1, fillOpacity: 0.8
+                    }).addTo(markerLayer).bindPopup(`<b>Rota:</b> ${p.originalRouteId}<br><b>Transportadora:</b> ${carrier}<br><b>Bairro:</b> ${p.neighborhood || 'N/A'}`);
+                }
+            }
+        });
+    }
+
+
+    // ==========================================
+    // GOOGLE DRIVE & APP INIT (inalterado)
+    // ==========================================
+    window.gapiLoaded = function() { gapi.load('client', async () => { await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] }); gapiInited = true; maybeEnableButtons(); });}
+    window.gisLoaded = function() { tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPES, callback: '', }); gisInited = true; maybeEnableButtons(); checkIfAlreadySignedIn(); }
+    function maybeEnableButtons() { if (gapiInited && gisInited && document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').disabled = false; }
+    function checkIfAlreadySignedIn() {
+        const token = localStorage.getItem('googleDriveToken');
+        if (token) { accessToken = token; gapi.client.setToken({ access_token: token }); updateGoogleSignInUI(true); }
+    }
+    function handleGoogleSignIn() {
+        if (!gisInited || !gapiInited) {
+            showToast("A API do Google ainda não foi inicializada.", 'error');
+            return;
+        }
+        if (accessToken) { handleGoogleSignOut(); return; }
+        tokenClient.callback = async (resp) => {
+            if (resp.error !== undefined) {
+                console.error("Google Sign-In Error:", resp);
+                showToast(`Erro na autenticação: ${resp.error_description || resp.error}`, 'error');
+                throw(resp);
+            }
+            accessToken = resp.access_token;
+            localStorage.setItem('googleDriveToken', accessToken);
+            updateGoogleSignInUI(true);
+            await uploadHistoryToDrive();
+        };
+        if (!gapi.client.getToken() || gapi.client.getToken().expires_in < 60) {
+             tokenClient.requestAccessToken({prompt: 'consent'});
+        } else {
+             tokenClient.requestAccessToken({prompt: ''});
+        }
+    }
+    function handleGoogleSignOut() {
+        if (accessToken) {
+            google.accounts.oauth2.revoke(accessToken);
+            gapi.client.setToken(''); accessToken = null;
+            localStorage.removeItem('googleDriveToken');
+            localStorage.removeItem('driveFolderId');
+            updateGoogleSignInUI(false);
+        }
+    }
+    function updateGoogleSignInUI(isSignedIn) {
+         if (document.getElementById('googleBtnText')) {
+            document.getElementById('googleBtnText').textContent = isSignedIn ? 'Desconectar' : 'Conectar Google';
+         }
+         if (document.getElementById('driveStatus')) {
+            const status = document.getElementById('driveStatus');
+            status.textContent = isSignedIn ? '✓ Conectado - Backup automático ativado' : 'Conecte sua conta para backup na nuvem';
+            status.classList.toggle('text-green-400', isSignedIn);
+            status.classList.toggle('text-gray-400', !isSignedIn);
+         }
+    }
+    async function getOrCreateFolder() {
+        let id = localStorage.getItem('driveFolderId'); if (id) return id;
+        try {
+            const resp = await gapi.client.drive.files.list({ q: "name='Distribuidor Rotas Backups' and mimeType='application/vnd.google-apps.folder' and trashed=false", fields: 'files(id)' });
+            if (resp.result.files.length > 0) id = resp.result.files[0].id;
+            else {
+                const folder = await gapi.client.drive.files.create({ resource: { name: 'Distribuidor Rotas Backups', mimeType: 'application/vnd.google-apps.folder' }, fields: 'id' });
+                id = folder.result.id;
+            }
+            localStorage.setItem('driveFolderId', id);
+            return id;
+         } catch(error) {
+             console.error("Erro ao obter/criar pasta no Drive:", error);
+             if (error.status === 401 || error.status === 403) {
+                 handleGoogleSignOut();
+                 showToast('Erro de permissão no Google Drive. Tente conectar novamente.', 'error');
+             } else {
+                 showToast('Erro ao acessar pasta no Google Drive.', 'error');
+             }
+             throw error;
+         }
+    }
+    async function uploadHistoryToDrive() {
+        if (!accessToken) return;
+        const history = localStorage.getItem('routesHistory'); if (!history || history === '[]') return;
+        try {
+            const folderId = await getOrCreateFolder();
+            const fileName = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
+            const search = await gapi.client.drive.files.list({ q: `name='${fileName}' and '${folderId}' in parents and trashed=false`, fields: 'files(id)' });
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify({ name: fileName, mimeType: 'application/json', parents: [folderId] })], {type:'application/json'}));
+            form.append('file', new Blob([history], {type:'application/json'}));
+            const fileId = search.result.files.length > 0 ? `/${search.result.files[0].id}` : '';
+            const uploadUrl = `https://www.googleapis.com/upload/drive/v3/files${fileId}?uploadType=multipart`;
+            const method = fileId ? 'PATCH' : 'POST';
+
+            const response = await fetch(uploadUrl, {
+                method: method,
+                headers: new Headers({'Authorization': 'Bearer ' + accessToken}),
+                body: form
+            });
+             if (!response.ok) {
+                 const errorBody = await response.json();
+                 console.error("Drive Upload Error Response:", errorBody);
+                 throw new Error(`Falha no upload para o Drive: ${errorBody.error.message || response.statusText}`);
+             }
+            updateDriveStatus('✓ Backup sincronizado com Google Drive');
+        } catch (error) {
+             console.error("Drive Upload Error:", error);
+             if (error.message.includes('401') || error.message.includes('403') || (error.result && (error.result.error.code === 401 || error.result.error.code === 403))) {
+                 handleGoogleSignOut();
+                 showToast('Erro de permissão no Google Drive. Tente conectar novamente.', 'error');
+             } else {
+                updateDriveStatus(`⚠ Erro ao sincronizar: ${error.message}`);
+             }
+        }
+    }
+    function updateDriveStatus(message) {
+         if (document.getElementById('driveStatus')) {
+            const status = document.getElementById('driveStatus'); status.textContent = message;
+            if (!message.startsWith('⚠ Erro')) {
+                 setTimeout(() => { if (accessToken) updateGoogleSignInUI(true) }, 3000);
+            }
+         }
+    }
+
+    // --- App Init ---
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSavedConfig(); // Carrega config, incluindo fidelityRules
+        resetTabs();
+        enableTab(0);
+         if (document.getElementById('googleSignInBtn')) {
+             document.getElementById('googleSignInBtn').disabled = true;
+         }
+         // Lógica de radio button inicial removida
+    });
+
+</script>
+
+<script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+<script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+
+</body>
+</html>
+
